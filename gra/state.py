@@ -1,0 +1,4 @@
+POINTS = []
+POINTS_PER_FRAME = 1
+DELAY = 16
+cframe = 0

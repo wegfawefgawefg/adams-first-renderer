@@ -1,0 +1,9 @@
+{
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportUnknownVariableType": "none",
+    "reportUnknownParameterType": "none",
+    "reportMissingParameterType": "none",
+    "reportUnknownArgumentType": "none",
+    "reportUnknownMemberType": "none"
+  }
+}
