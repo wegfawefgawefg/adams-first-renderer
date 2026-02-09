@@ -9,6 +9,7 @@ import afr.state as state
 from afr.state import load
 from afr.cli import parse_args
 from afr.input import do_inputs, init_input
+from afr.physics import step_mario_physics
 
 
 def main(argv: list[str] | None = None):
@@ -54,6 +55,7 @@ def main(argv: list[str] | None = None):
         ms = clock.tick(args.fps) if args.fps > 0 else clock.tick()
         dt = ms / 1000.0
         running = do_inputs(app_state, dt)
+        step_mario_physics(app_state, dt)
 
         if not state.DEFERRED_PLOTTING:
             render_surface.lock()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import deque
 
 import pygame
@@ -50,10 +50,21 @@ class AppState:
     # Mario/player transform in world space.
     mario_pos: object | None = None  # Vec3
     mario_yaw: float = math.pi  # yaw=pi looks toward -Z with our convention
+    mario_vel: object = field(default_factory=lambda: Vec3(0.0, 0.0, 0.0))
+    mario_radius: float = 0.35
+    on_ground: bool = False
+
+    # Input intent (set by afr.input, consumed by afr.physics).
+    move_dir: object = field(default_factory=lambda: Vec3(0.0, 0.0, 0.0))
+    sprint: bool = False
+    jump_pressed: bool = False
 
     # Camera angles (third person).
     cam_pitch: float = -0.25
     mouse_look: bool = True
+
+    # Static collision data for the castle.
+    castle_collider: object | None = None  # afr.physics.CastleCollider
 
 
 from pathlib import Path
@@ -61,6 +72,7 @@ from afr.linalg.vec3 import Vec3
 from afr.linalg.mat4 import Mat4
 from afr.models.obj import load_obj
 from afr.models.gltf import load_gltf_scene
+from afr.physics import build_collider_from_scene, raycast_down_y
 
 
 def load(app_state: AppState) -> None:
@@ -129,10 +141,19 @@ def load(app_state: AppState) -> None:
             prim.local_to_world = mario_recenter @ prim.local_to_world
         mario_mn, mario_mx = scene_bounds(mario)
 
-        # Place Mario: on top of the castle, near the "front" edge (+Z),
-        # facing toward the castle (-Z).
-        desired_pos = Vec3(0.0, castle_mx.y + 0.01, castle_mx.z + 5.0)
-        app_state.mario_pos = desired_pos
+        # Place Mario: pick a spawn above the castle and raycast down to find ground.
+        # (Avoid spawning over empty space and falling forever.)
+        collider = build_collider_from_scene(castle)
+        app_state.castle_collider = collider
+
+        spawn_x = 0.0
+        spawn_z = 0.0
+        y0 = float(castle_mx.y) + 50.0
+        hit_y = raycast_down_y(collider, spawn_x, spawn_z, y0, query_radius=8.0)
+        if hit_y is None:
+            # Fallback: just above the castle bounds.
+            hit_y = float(castle_mx.y) + 1.0
+        app_state.mario_pos = Vec3(spawn_x, hit_y + 0.02, spawn_z)
         app_state.mario_yaw = math.pi
         app_state.cam_pitch = -0.25
 

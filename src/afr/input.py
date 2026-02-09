@@ -19,6 +19,8 @@ def do_inputs(app_state, dt: float) -> bool:
     mouse_dx = 0
     mouse_dy = 0
 
+    app_state.jump_pressed = False
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             return False
@@ -31,6 +33,9 @@ def do_inputs(app_state, dt: float) -> bool:
                 app_state.mouse_look = not app_state.mouse_look
                 pygame.event.set_grab(app_state.mouse_look)
                 pygame.mouse.set_visible(not app_state.mouse_look)
+
+            if event.key == pygame.K_SPACE:
+                app_state.jump_pressed = True
 
         if event.type == pygame.MOUSEMOTION and app_state.mouse_look:
             rel = event.rel
@@ -48,7 +53,7 @@ def do_inputs(app_state, dt: float) -> bool:
         app_state.cam_pitch = max(-1.25, min(1.25, app_state.cam_pitch))
 
     keys = pygame.key.get_pressed()
-    # Q/E intentionally unbound (Space/Shift handle vertical movement).
+    # Q/E intentionally unbound.
 
     # Flat forward/right for Mario movement (XZ plane).
     cy = math.cos(app_state.mario_yaw)
@@ -57,8 +62,7 @@ def do_inputs(app_state, dt: float) -> bool:
     world_up = Vec3(0.0, 1.0, 0.0)
     right = forward.cross(world_up).norm()
 
-    # Movement: Mario locomotion (W/S forward/back, A/D strafe).
-    # Space/Shift move vertically for debugging.
+    # Movement intent: Mario locomotion (W/S forward/back, A/D strafe).
     move = Vec3(0.0, 0.0, 0.0)
     if keys[pygame.K_w]:
         move = move + forward
@@ -68,16 +72,8 @@ def do_inputs(app_state, dt: float) -> bool:
         move = move + right
     if keys[pygame.K_a]:
         move = move - right
-    if keys[pygame.K_SPACE]:
-        move = move + world_up
-    if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
-        move = move - world_up
 
-    if move.mag() > 0:
-        move = move.norm()
-        speed = 5.0
-        if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
-            speed *= 3.0
-        app_state.mario_pos = app_state.mario_pos + move * (speed * dt)
+    app_state.move_dir = move
+    app_state.sprint = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
 
     return True
