@@ -57,5 +57,12 @@ def load(app_state: AppState) -> None:
     )
     app_state.cube_model = Model.load(model_path)
 
-    tex_path = Path(__file__).resolve().parents[2] / "assets" / "textures" / "kirby.png"
-    app_state.kirby_tex = pygame.image.load(str(tex_path)).convert_alpha()
+    tex_path = (
+        Path(__file__).resolve().parents[2] / "assets" / "textures" / "kirby.png"
+    )
+    tex = pygame.image.load(str(tex_path))
+    # convert_alpha requires a video mode; keep it optional so this loader can
+    # be used in headless tests/tools.
+    if pygame.display.get_surface() is not None:
+        tex = tex.convert_alpha()
+    app_state.kirby_tex = tex

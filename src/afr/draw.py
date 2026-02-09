@@ -1,10 +1,10 @@
 import pygame
-import glm
-
-
+from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
 from afr.settings import RES, WINDOW_RES
+from afr.rendering import Camera, PointLight, Scene, draw_model, ortho_for_surface
+
 from afr.primitives import *
 from afr.colors import *
 
@@ -51,55 +51,38 @@ def draw_mouse_coords(surface):
 
 
 def draw(surface, app_state):
-    # draw a point in the middle
-    center = RES / 2
-    # point(surface, center)
+    model = app_state.cube_model
+    tex = app_state.kirby_tex
 
-    cube_verts = [v.clone() for v in app_state.cube_model.verts]
-    cube_faces_tris = app_state.cube_model.faces
-    cube_faces_uvs = app_state.cube_model.uvs
+    t = pygame.time.get_ticks() / 1000.0
+    angle = t * 0.5
 
-    scale = Vec3.splat(20)
-    center_3d = Vec3(center.x, center.y, 0)
-    angle = pygame.time.get_ticks() / 1000.0 * 0.5  # rotate over time
+    # World-space camera.
+    cam = Camera(
+        pos=Vec3(0.0, 0.0, 5.0),
+        target=Vec3(0.0, 0.0, 0.0),
+        up=Vec3(0.0, 1.0, 0.0),
+    )
+    view = cam.view()
 
-    # transform points in place
-    for i, p in enumerate(cube_verts):
-        p = p * scale
-        p = p.rotate_x(angle)
-        p = p.rotate_y(angle * 0.5)
-        p = p.rotate_z(angle * 0.25)
-        p = p + center_3d
-        cube_verts[i] = p
+    # Ortho projection sized for the surface.
+    proj = ortho_for_surface(
+        surface.get_width(), surface.get_height(), half_height=2.2, near=0.1, far=100.0
+    )
 
-    # Approx camera is in front of the screen looking toward the origin.
-    # Put the light at the camera so faces oriented toward us are bright.
-    camera_pos = center_3d + Vec3(0.0, 0.0, -200.0)
-    light_pos = camera_pos
-    l = light_pos
+    # Model transform in world space (scale + rotate).
+    model_mat = (
+        Mat4.rotate_x(angle)
+        @ Mat4.rotate_y(angle * 0.5)
+        @ Mat4.rotate_z(angle * 0.25)
+        @ Mat4.scale(1.2)
+    )
 
-    # Simple Z-buffer for correct visibility (prevents "missing triangles"
-    # caused by painter sorting edge-cases).
-    sw = surface.get_width()
-    sh = surface.get_height()
-    zbuf = [float("inf")] * (sw * sh)
+    scene = Scene(lights=[PointLight(pos=cam.pos, intensity=1.0)], ambient=0.15)
 
-    for (i1, i2, i3), (t1, t2, t3) in zip(cube_faces_tris, cube_faces_uvs):
-        p1, p2, p3 = cube_verts[i1], cube_verts[i2], cube_verts[i3]
+    # Z-buffer per frame (CPU).
+    zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
 
-        face_normal = (p2 - p1).cross(p3 - p1).norm()
-        face_center = (p1 + p2 + p3) * (1.0 / 3.0)
-        face_to_light = (l - face_center).norm()
-        brightness = max(0.15, face_normal.dot(face_to_light))
-        triangle_textured_z(
-            surface,
-            p1,
-            p2,
-            p3,
-            t1,
-            t2,
-            t3,
-            app_state.kirby_tex,
-            zbuf,
-            shade=brightness,
-        )
+    draw_model(
+        surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
+    )
