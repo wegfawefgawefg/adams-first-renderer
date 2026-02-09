@@ -4,8 +4,9 @@ import time
 import pygame
 
 from afr.settings import WINDOW_RES, RES
-from afr.draw import draw, draw_some_points
-from afr.vec2 import Vec2
+from afr.draw import draw
+from afr.core_rendering import draw_some_points
+from afr.linalg.vec2 import Vec2
 import afr.state as state
 
 
@@ -49,7 +50,9 @@ def main(argv: list[str] | None = None):
     state.DEFERRED_PLOTTING = bool(args.defer) or bool(args.bench_blit)
     state.BLIT_PPS = max(0, int(args.blit_rate))
     state.BLIT_ACCUM = 0.0
-    state.PLOT = state.plot_deferred if state.DEFERRED_PLOTTING else state.plot_immediate
+    state.PLOT = (
+        state.plot_deferred if state.DEFERRED_PLOTTING else state.plot_immediate
+    )
 
     pygame.init()
     clock = pygame.time.Clock()

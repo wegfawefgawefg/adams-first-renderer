@@ -1,5 +1,5 @@
 import math
-from afr.vec2 import Vec2
+from afr.linalg.vec2 import Vec2
 import afr.state as state
 
 
