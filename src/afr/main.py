@@ -1,7 +1,7 @@
 import pygame
 
-from gra.settings import WINDOW_RES, RES
-from gra.draw import draw, draw_once
+from afr.settings import WINDOW_RES, RES
+from afr.draw import draw, draw_once
 
 pygame.init()
 

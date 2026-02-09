@@ -1,1 +1,1 @@
-"""gra package."""
+"""Adams First Renderer (AFR)."""

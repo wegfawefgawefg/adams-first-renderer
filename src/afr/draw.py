@@ -1,10 +1,10 @@
 import pygame
 import glm
 
-from gra.settings import RES, WINDOW_RES
-from gra.primitives import *
-from gra.state import cframe, POINTS, POINTS_PER_FRAME, DELAY
-from gra.colors import *
+from afr.settings import RES, WINDOW_RES
+from afr.primitives import *
+from afr.state import cframe, POINTS, POINTS_PER_FRAME, DELAY
+from afr.colors import *
 
 """ we are inventing these from scratch for education 
 ## lines

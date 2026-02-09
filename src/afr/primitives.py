@@ -1,6 +1,6 @@
 import math
-from gra.vec2 import Vec2
-from gra.state import POINTS
+from afr.vec2 import Vec2
+from afr.state import POINTS
 
 
 def point(surface, pos):

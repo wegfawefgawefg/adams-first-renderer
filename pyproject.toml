@@ -1,7 +1,7 @@
 [project]
-name = "gwaphics-dirt"
+name = "adams-first-renderer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Adams First Renderer (AFR): a from-scratch educational software renderer for learning graphics fundamentals."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,7 +10,13 @@ dependencies = [
 ]
 
 [project.scripts]
-gra = "gra.main:main"
+afr = "afr.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
 requires = ["setuptools>=68"]
