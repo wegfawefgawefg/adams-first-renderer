@@ -44,14 +44,15 @@ PLOT = plot_immediate
 @dataclass
 class AppState:
     # Cached resources for draw().
-    scene: object | None = None  # afr.scene.SceneData
-    ortho_half_height: float = 150.0
+    castle_scene: object | None = None  # afr.scene.SceneData
+    mario_scene: object | None = None  # afr.scene.SceneData
 
-    # Fly camera (world space).
-    cam_pos: object | None = None
-    cam_yaw: float = math.pi  # yaw=pi looks toward -Z with our convention
-    cam_pitch: float = 0.0
-    cam_roll: float = 0.0
+    # Mario/player transform in world space.
+    mario_pos: object | None = None  # Vec3
+    mario_yaw: float = math.pi  # yaw=pi looks toward -Z with our convention
+
+    # Camera angles (third person).
+    cam_pitch: float = -0.25
     mouse_look: bool = True
 
 
@@ -63,7 +64,7 @@ from afr.models.gltf import load_gltf_scene
 
 
 def load(app_state: AppState) -> None:
-    if app_state.scene is None:
+    if app_state.castle_scene is None or app_state.mario_scene is None:
         root = Path(__file__).resolve().parents[2] / "assets" / "models"
 
         castle = load_obj(root / "peaches_castle.obj")
@@ -90,10 +91,11 @@ def load(app_state: AppState) -> None:
         mario_h = max(1e-6, mario_mx.y - mario_mn.y)
         mario_scale = 1.0 / mario_h
 
-        # Make the castle about 200 Marios wide.
+        # Make the castle about 100 Marios wide.
+        # (Previously 200; that ended up feeling about 2x too big.)
         castle_mn, castle_mx = scene_bounds(castle)
         castle_w = max(1e-6, castle_mx.x - castle_mn.x)
-        castle_scale = (200.0 * 1.0) / castle_w
+        castle_scale = (100.0 * 1.0) / castle_w
 
         # Apply scaling.
         castle_xform = Mat4.scale(castle_scale)
@@ -104,40 +106,35 @@ def load(app_state: AppState) -> None:
         for prim in mario.primitives:
             prim.local_to_world = mario_scale_mat @ prim.local_to_world
 
-        # Recompute scaled castle bounds for placement.
+        # Center the castle around the origin (XZ) and put its base on y=0.
         castle_mn, castle_mx = scene_bounds(castle)
         castle_center = (castle_mn + castle_mx) * 0.5
-
-        # Place Mario in front of and on top of the castle.
-        mario_mn, mario_mx = scene_bounds(mario)
-        mario_h = mario_mx.y - mario_mn.y
-        mario_center = (mario_mn + mario_mx) * 0.5
-
-        desired_pos = Vec3(castle_center.x, castle_mx.y + mario_h * 0.5, castle_mx.z + 10.0)
-        mario_xform = Mat4.translate(
-            desired_pos.x - mario_center.x,
-            desired_pos.y - mario_center.y,
-            desired_pos.z - mario_center.z,
+        castle_recenter = Mat4.translate(
+            -castle_center.x,
+            -castle_mn.y,
+            -castle_center.z,
         )
+        for prim in castle.primitives:
+            prim.local_to_world = castle_recenter @ prim.local_to_world
+        castle_mn, castle_mx = scene_bounds(castle)
+
+        # Re-center Mario around a useful pivot: bottom-center of his bounds.
+        mario_mn, mario_mx = scene_bounds(mario)
+        mario_pivot = Vec3((mario_mn.x + mario_mx.x) * 0.5, mario_mn.y, (mario_mn.z + mario_mx.z) * 0.5)
+        mario_recenter = Mat4.translate(-mario_pivot.x, -mario_pivot.y, -mario_pivot.z)
         for prim in mario.primitives:
-            prim.local_to_world = mario_xform @ prim.local_to_world
+            prim.local_to_world = mario_recenter @ prim.local_to_world
+        mario_mn, mario_mx = scene_bounds(mario)
 
-        # Merge into one scene.
-        castle.primitives.extend(mario.primitives)
-        app_state.scene = castle
+        # Place Mario: on top of the castle, near the "front" edge (+Z),
+        # facing toward the castle (-Z).
+        desired_pos = Vec3(0.0, castle_mx.y + 0.01, castle_mx.z + 5.0)
+        app_state.mario_pos = desired_pos
+        app_state.mario_yaw = math.pi
+        app_state.cam_pitch = -0.25
 
-        # Default camera: above and in front, looking at the castle center.
-        cam_target = castle_center
-        cam_pos = castle_center + Vec3(0.0, 120.0, 160.0)
-        app_state.cam_pos = cam_pos
-        d = (cam_target - cam_pos).norm()
-        # Our forward convention: forward = (cp*sy, sp, cp*cy)
-        app_state.cam_yaw = math.atan2(d.x, d.z)
-        app_state.cam_pitch = math.asin(d.y)
-        app_state.cam_roll = 0.0
+        app_state.castle_scene = castle
+        app_state.mario_scene = mario
 
-        # Ortho zoom to fit the scaled castle reasonably.
-        app_state.ortho_half_height = max(50.0, (castle_mx.y - castle_mn.y) * 0.75)
-
-    if app_state.cam_pos is None:
-        app_state.cam_pos = Vec3(0.0, 5.0, 20.0)
+    if app_state.mario_pos is None:
+        app_state.mario_pos = Vec3(0.0, 1.0, 10.0)

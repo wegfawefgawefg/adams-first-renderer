@@ -3,7 +3,7 @@ from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
 from afr.settings import RES, WINDOW_RES
-from afr.rendering import Camera, PointLight, Scene, draw_primitive, ortho_for_surface
+from afr.rendering import Camera, PointLight, Scene, draw_primitive
 
 from afr.primitives import *
 from afr.colors import *
@@ -51,58 +51,57 @@ def draw_mouse_coords(surface):
 
 
 def draw(surface, app_state):
-    # Camera from AppState (world space).
     import math
     t = pygame.time.get_ticks() / 1000.0
 
-    cy = math.cos(app_state.cam_yaw)
-    sy = math.sin(app_state.cam_yaw)
-    cp = math.cos(app_state.cam_pitch)
-    sp = math.sin(app_state.cam_pitch)
-    forward = Vec3(cp * sy, sp, cp * cy).norm()
     world_up = Vec3(0.0, 1.0, 0.0)
-    right = forward.cross(world_up).norm()
-    up = right.cross(forward).norm()
-    if app_state.cam_roll != 0.0:
-        right = right.rotate(forward, app_state.cam_roll)
-        up = up.rotate(forward, app_state.cam_roll)
 
-    cam = Camera(
-        pos=app_state.cam_pos,
-        target=app_state.cam_pos + forward,
-        up=up,
-    )
+    # Third-person camera: behind Mario, looking where he's facing.
+    yaw = float(getattr(app_state, "mario_yaw", 0.0))
+    pitch = float(getattr(app_state, "cam_pitch", 0.0))
+    mario_pos = getattr(app_state, "mario_pos", Vec3(0.0, 1.0, 10.0))
+
+    cy = math.cos(yaw)
+    sy = math.sin(yaw)
+    cp = math.cos(pitch)
+    sp = math.sin(pitch)
+
+    flat_forward = Vec3(sy, 0.0, cy).norm()
+    cam_forward = Vec3(cp * sy, sp, cp * cy).norm()
+
+    follow_dist = 6.0
+    follow_height = 2.0
+    cam_pos = mario_pos - flat_forward * follow_dist + Vec3(0.0, follow_height, 0.0)
+    cam_target = mario_pos + Vec3(0.0, 1.0, 0.0) + cam_forward * 2.0
+
+    cam = Camera(pos=cam_pos, target=cam_target, up=world_up)
     view = cam.view()
 
-    # Ortho projection sized for the surface.
-    proj = ortho_for_surface(
-        surface.get_width(),
-        surface.get_height(),
-        half_height=float(getattr(app_state, "ortho_half_height", 12.0)),
-        # These are view-space distances; our view matrix puts points in front at negative Z.
-        near=0.1,
-        far=5000.0,
-    )
+    # Perspective projection.
+    w = surface.get_width()
+    h = surface.get_height()
+    aspect = (w / h) if h else 1.0
+    proj = Mat4.perspective(math.radians(65.0), aspect, 0.1, 5000.0)
 
-    # A few colored point lights rotating around the model (world space).
-    # Scale the orbit with zoom so lighting doesn't become microscopic once the
-    # world gets "big" (castle + mario).
-    hh = float(getattr(app_state, "ortho_half_height", 12.0))
-    r = max(35.0, hh * 0.35)
-    y = max(20.0, hh * 0.20)
+    # A few colored point lights rotating around Mario (world space).
+    center = mario_pos + Vec3(0.0, 1.0, 0.0)
+    r = 12.0
+    y = 6.0
     lights = [
         PointLight(
-            pos=Vec3(math.cos(t * 0.8) * r, y, math.sin(t * 0.8) * r),
+            pos=center + Vec3(math.cos(t * 0.8) * r, y, math.sin(t * 0.8) * r),
             color=Vec3(1.0, 0.2, 0.2),
             intensity=0.9,
         ),
         PointLight(
-            pos=Vec3(math.cos(t * 0.8 + 2.1) * r, y, math.sin(t * 0.8 + 2.1) * r),
+            pos=center
+            + Vec3(math.cos(t * 0.8 + 2.1) * r, y, math.sin(t * 0.8 + 2.1) * r),
             color=Vec3(0.2, 1.0, 0.2),
             intensity=0.9,
         ),
         PointLight(
-            pos=Vec3(math.cos(t * 0.8 + 4.2) * r, y, math.sin(t * 0.8 + 4.2) * r),
+            pos=center
+            + Vec3(math.cos(t * 0.8 + 4.2) * r, y, math.sin(t * 0.8 + 4.2) * r),
             color=Vec3(0.2, 0.4, 1.0),
             intensity=0.9,
         ),
@@ -114,7 +113,11 @@ def draw(surface, app_state):
     # Z-buffer per frame (CPU), shared across all cubes.
     zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
 
-    root_world = Mat4.scale(1.0)
-    if app_state.scene is not None:
-        for prim in app_state.scene.primitives:
-            draw_primitive(surface, prim, root_world, view, proj, scene=scene, zbuf=zbuf)
+    if getattr(app_state, "castle_scene", None) is not None:
+        for prim in app_state.castle_scene.primitives:
+            draw_primitive(surface, prim, Mat4.identity(), view, proj, scene=scene, zbuf=zbuf)
+
+    if getattr(app_state, "mario_scene", None) is not None:
+        mario_world = Mat4.translate(mario_pos.x, mario_pos.y, mario_pos.z) @ Mat4.rotate_y(yaw)
+        for prim in app_state.mario_scene.primitives:
+            draw_primitive(surface, prim, mario_world, view, proj, scene=scene, zbuf=zbuf)

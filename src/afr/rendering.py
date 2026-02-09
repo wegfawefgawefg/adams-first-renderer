@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
+from afr.linalg.vec4 import Vec4
 from afr.scene import Mesh, Material, Primitive
 from afr.primitives import triangle_filled_z, triangle_textured_z
 
@@ -78,7 +79,18 @@ def draw_model(
     viewproj = proj_mat @ view_mat
     verts_ms = mesh.positions
     verts_ws = [model_mat @ v for v in verts_ms]
-    verts_ndc = [viewproj @ v for v in verts_ws]
+
+    # IMPORTANT: don't use Mat4@Vec3 here because it divides by w automatically.
+    # With perspective, triangles that cross behind the camera (w <= 0) will
+    # produce huge screen-space coordinates if we don't clip/reject first.
+    verts_clip = [viewproj @ Vec4(v.x, v.y, v.z, 1.0) for v in verts_ws]
+    verts_ndc: list[Vec3] = []
+    for c in verts_clip:
+        if c.w == 0.0:
+            verts_ndc.append(Vec3(0.0, 0.0, 0.0))
+        else:
+            invw = 1.0 / float(c.w)
+            verts_ndc.append(Vec3(float(c.x) * invw, float(c.y) * invw, float(c.z) * invw))
     verts_ss = [ndc_to_screen(v, sw, sh) for v in verts_ndc]
 
     tex_surface = material.base_color_tex.surface if material.base_color_tex else None
@@ -86,6 +98,16 @@ def draw_model(
     use_scene = scene is not None
 
     for (i1, i2, i3) in mesh.indices:
+        # Crude near-plane handling: reject triangles with any vertex behind the camera.
+        # Proper clipping would slice the triangle against the near plane; this is
+        # good enough to prevent the "full screen giant triangle" glitch.
+        if (
+            verts_clip[i1].w <= 1e-6
+            or verts_clip[i2].w <= 1e-6
+            or verts_clip[i3].w <= 1e-6
+        ):
+            continue
+
         p1s, p2s, p3s = verts_ss[i1], verts_ss[i2], verts_ss[i3]
 
         # Flat normal in world space for now.

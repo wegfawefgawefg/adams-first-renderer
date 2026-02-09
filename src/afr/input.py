@@ -12,7 +12,7 @@ def init_input(app_state) -> None:
 
 
 def do_inputs(app_state, dt: float) -> bool:
-    """Process inputs/events and update camera in app_state.
+    """Process inputs/events and update mario + camera angles in app_state.
 
     Returns True to keep running, False to quit.
     """
@@ -37,59 +37,47 @@ def do_inputs(app_state, dt: float) -> bool:
             mouse_dx += rel[0]
             mouse_dy += rel[1]
 
-    # Yaw/pitch from mouse, roll from Q/E.
+    # Yaw/pitch from mouse (camera follows behind Mario).
     if app_state.mouse_look:
         sens = 0.0025
-        # Positive mouse_dx should look right.
-        app_state.cam_yaw -= mouse_dx * sens
+        # Positive mouse_dx should look right (increase yaw).
+        app_state.mario_yaw += mouse_dx * sens
+        # Mouse up should look up; pygame gives negative dy for up.
         app_state.cam_pitch += -mouse_dy * sens
         # Clamp pitch to avoid flipping.
-        app_state.cam_pitch = max(-1.55, min(1.55, app_state.cam_pitch))
+        app_state.cam_pitch = max(-1.25, min(1.25, app_state.cam_pitch))
 
     keys = pygame.key.get_pressed()
-    roll_speed = 1.5  # rad/sec
-    if keys[pygame.K_q]:
-        app_state.cam_roll -= roll_speed * dt
-    if keys[pygame.K_e]:
-        app_state.cam_roll += roll_speed * dt
+    # Q/E intentionally unbound (Space/Shift handle vertical movement).
 
-    # Forward vector (yaw/pitch). Convention:
-    # yaw=0 points +Z, yaw=pi points -Z.
-    cy = math.cos(app_state.cam_yaw)
-    sy = math.sin(app_state.cam_yaw)
-    cp = math.cos(app_state.cam_pitch)
-    sp = math.sin(app_state.cam_pitch)
-    forward = Vec3(cp * sy, sp, cp * cy).norm()
+    # Flat forward/right for Mario movement (XZ plane).
+    cy = math.cos(app_state.mario_yaw)
+    sy = math.sin(app_state.mario_yaw)
+    forward = Vec3(sy, 0.0, cy).norm()
     world_up = Vec3(0.0, 1.0, 0.0)
     right = forward.cross(world_up).norm()
-    up = right.cross(forward).norm()
 
-    # Apply roll around forward axis.
-    if app_state.cam_roll != 0.0:
-        right = right.rotate(forward, app_state.cam_roll)
-        up = up.rotate(forward, app_state.cam_roll)
-
-    # Movement: orthographic "pan" (W/S on world Y, A/D on camera right).
-    # Use Space/Shift for depth along camera forward/back.
+    # Movement: Mario locomotion (W/S forward/back, A/D strafe).
+    # Space/Shift move vertically for debugging.
     move = Vec3(0.0, 0.0, 0.0)
     if keys[pygame.K_w]:
-        move = move + world_up
+        move = move + forward
     if keys[pygame.K_s]:
-        move = move - world_up
+        move = move - forward
     if keys[pygame.K_d]:
         move = move + right
     if keys[pygame.K_a]:
         move = move - right
     if keys[pygame.K_SPACE]:
-        move = move + forward
+        move = move + world_up
     if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
-        move = move - forward
+        move = move - world_up
 
     if move.mag() > 0:
         move = move.norm()
-        speed = 3.0
+        speed = 5.0
         if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
             speed *= 3.0
-        app_state.cam_pos = app_state.cam_pos + move * (speed * dt)
+        app_state.mario_pos = app_state.mario_pos + move * (speed * dt)
 
     return True
