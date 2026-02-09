@@ -1,9 +1,11 @@
 import argparse
 import sys
+import time
 import pygame
 
 from afr.settings import WINDOW_RES, RES
 from afr.draw import draw, draw_some_points
+from afr.vec2 import Vec2
 import afr.state as state
 
 
@@ -26,9 +28,25 @@ def main(argv: list[str] | None = None):
         default=60,
         help="Frame cap (use 0 for uncapped).",
     )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Print FPS and effective blit throughput once per second.",
+    )
+    parser.add_argument(
+        "--bench-blit",
+        action="store_true",
+        help="Benchmark blitting throughput by draining a pre-filled pixel queue (implies --defer).",
+    )
+    parser.add_argument(
+        "--bench-pixels",
+        type=int,
+        default=200_000,
+        help="How many pixels to enqueue for --bench-blit.",
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
-    state.DEFERRED_PLOTTING = bool(args.defer)
+    state.DEFERRED_PLOTTING = bool(args.defer) or bool(args.bench_blit)
     state.BLIT_PPS = max(0, int(args.blit_rate))
     state.BLIT_ACCUM = 0.0
     state.PLOT = state.plot_deferred if state.DEFERRED_PLOTTING else state.plot_immediate
@@ -38,6 +56,24 @@ def main(argv: list[str] | None = None):
 
     window = pygame.display.set_mode(WINDOW_RES.to_tuple())
     render_surface = pygame.Surface(RES.to_tuple())
+
+    if args.bench_blit:
+        # Pre-fill a lot of pixels so the queue stays non-empty long enough to
+        # observe a stable throughput plateau.
+        w = render_surface.get_width()
+        h = render_surface.get_height()
+        n = max(0, int(args.bench_pixels))
+        # Keep memory sane if someone passes a huge number accidentally.
+        n = min(n, 5_000_000)
+        for i in range(n):
+            x = i % w
+            y = (i // w) % h
+            state.POINTS.append((Vec2(x, y), (255, 255, 255)))
+
+    # Stats (effective drain throughput).
+    stat_t0 = time.perf_counter()
+    stat_pixels = 0
+    stat_peak_pps = 0.0
 
     running = True
     while running:
@@ -54,18 +90,51 @@ def main(argv: list[str] | None = None):
         if not state.DEFERRED_PLOTTING:
             render_surface.fill((0, 0, 0))
             draw(render_surface)
-        else:  # defered mode
-            if not state.POINTS:
-                render_surface.fill((0, 0, 0))
-                draw(render_surface)
+        else:  # deferred mode
+            if args.bench_blit:
+                # Keep the queue non-empty so the benchmark measures steady-state drain.
+                if not state.POINTS:
+                    w = render_surface.get_width()
+                    h = render_surface.get_height()
+                    n = max(0, int(args.bench_pixels))
+                    n = min(n, 5_000_000)
+                    for i in range(n):
+                        x = i % w
+                        y = (i // w) % h
+                        state.POINTS.append((Vec2(x, y), (255, 255, 255)))
+
+                drained = draw_some_points(render_surface, dt, stats=args.stats)
+                if args.stats:
+                    stat_pixels += drained
             else:
-                draw_some_points(render_surface, dt)
+                # Normal deferred behavior: only enqueue a new "frame" when the queue is empty,
+                # then drain it gradually.
+                if not state.POINTS:
+                    state.NEEDS_CLEAR = True
+                    draw(render_surface)
+                drained = draw_some_points(render_surface, dt, stats=args.stats)
+                if args.stats:
+                    stat_pixels += drained
 
         stretched_surface = pygame.transform.scale(
             render_surface, WINDOW_RES.to_tuple()
         )
         window.blit(stretched_surface, (0, 0))
         pygame.display.update()
+
+        if args.stats and state.DEFERRED_PLOTTING:
+            now = time.perf_counter()
+            elapsed = now - stat_t0
+            if elapsed >= 1.0:
+                pps = stat_pixels / elapsed if elapsed > 0 else 0.0
+                stat_peak_pps = max(stat_peak_pps, pps)
+                qlen = len(state.POINTS)
+                fps = clock.get_fps()
+                print(
+                    f"fps={fps:5.1f} drained_pps={pps:10.1f} peak_pps={stat_peak_pps:10.1f} queue={qlen}"
+                )
+                stat_t0 = now
+                stat_pixels = 0
 
     pygame.quit()
 
