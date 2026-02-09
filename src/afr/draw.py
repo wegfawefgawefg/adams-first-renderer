@@ -3,7 +3,7 @@ from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
 from afr.settings import RES, WINDOW_RES
-from afr.rendering import Camera, PointLight, Scene, draw_model, ortho_for_surface
+from afr.rendering import Camera, PointLight, Scene, draw_primitive, ortho_for_surface
 
 from afr.primitives import *
 from afr.colors import *
@@ -76,12 +76,20 @@ def draw(surface, app_state):
 
     # Ortho projection sized for the surface.
     proj = ortho_for_surface(
-        surface.get_width(), surface.get_height(), half_height=6.0, near=0.1, far=100.0
+        surface.get_width(),
+        surface.get_height(),
+        half_height=float(getattr(app_state, "ortho_half_height", 12.0)),
+        # These are view-space distances; our view matrix puts points in front at negative Z.
+        near=0.1,
+        far=5000.0,
     )
 
     # A few colored point lights rotating around the model (world space).
-    r = 35.0
-    y = 20.0
+    # Scale the orbit with zoom so lighting doesn't become microscopic once the
+    # world gets "big" (castle + mario).
+    hh = float(getattr(app_state, "ortho_half_height", 12.0))
+    r = max(35.0, hh * 0.35)
+    y = max(20.0, hh * 0.20)
     lights = [
         PointLight(
             pos=Vec3(math.cos(t * 0.8) * r, y, math.sin(t * 0.8) * r),
@@ -106,13 +114,7 @@ def draw(surface, app_state):
     # Z-buffer per frame (CPU), shared across all cubes.
     zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
 
-    # Draw loaded glTF primitives (Mario). Each primitive has its own local matrix and texture.
-    root_model_mat = (
-        Mat4.scale(10.0)
-    )
-    for prim in app_state.scene_prims or []:
-        model, tex, local_mat = prim
-        model_mat = root_model_mat @ local_mat
-        draw_model(
-            surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
-        )
+    root_world = Mat4.scale(1.0)
+    if app_state.scene is not None:
+        for prim in app_state.scene.primitives:
+            draw_primitive(surface, prim, root_world, view, proj, scene=scene, zbuf=zbuf)

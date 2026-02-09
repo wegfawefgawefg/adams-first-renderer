@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
-from afr.models.model import Model
+from afr.scene import Mesh, Material, Primitive
 from afr.primitives import triangle_filled_z, triangle_textured_z
 
 
@@ -61,13 +61,13 @@ def shade_flat(scene: Scene, normal_ws: Vec3, pos_ws: Vec3) -> Vec3:
 
 def draw_model(
     surface,
-    model: Model,
+    mesh: Mesh,
+    material: Material,
     model_mat: Mat4,
     view_mat: Mat4,
     proj_mat: Mat4,
     *,
     scene: Scene | None = None,
-    texture=None,
     zbuf: list[float] | None = None,
 ) -> None:
     sw = surface.get_width()
@@ -76,15 +76,16 @@ def draw_model(
         zbuf = [float("inf")] * (sw * sh)
 
     viewproj = proj_mat @ view_mat
-    verts_ms = model.verts
+    verts_ms = mesh.positions
     verts_ws = [model_mat @ v for v in verts_ms]
     verts_ndc = [viewproj @ v for v in verts_ws]
     verts_ss = [ndc_to_screen(v, sw, sh) for v in verts_ndc]
 
-    use_tex = texture is not None and model.uvs and len(model.uvs) == len(model.faces)
+    tex_surface = material.base_color_tex.surface if material.base_color_tex else None
+    use_tex = tex_surface is not None and mesh.uvs is not None
     use_scene = scene is not None
 
-    for fi, (i1, i2, i3) in enumerate(model.faces):
+    for (i1, i2, i3) in mesh.indices:
         p1s, p2s, p3s = verts_ss[i1], verts_ss[i2], verts_ss[i3]
 
         # Flat normal in world space for now.
@@ -97,12 +98,34 @@ def draw_model(
             shade = Vec3.splat(1.0)
 
         if use_tex:
-            uv1, uv2, uv3 = model.uvs[fi]
+            uv1, uv2, uv3 = mesh.uvs[i1], mesh.uvs[i2], mesh.uvs[i3]
+            shade = shade * material.base_color
             triangle_textured_z(
-                surface, p1s, p2s, p3s, uv1, uv2, uv3, texture, zbuf, shade=shade
+                surface, p1s, p2s, p3s, uv1, uv2, uv3, tex_surface, zbuf, shade=shade
             )
         else:
-            # grayscale from shade for now if no texture
-            avg = (shade.x + shade.y + shade.z) * (1.0 / 3.0)
-            g = max(0, min(255, int(255 * min(avg, 1.0))))
-            triangle_filled_z(surface, p1s, p2s, p3s, (g, g, g, 255), zbuf)
+            col = (shade * material.base_color).clamp(0.0, 1.0)
+            c255 = (int(255 * col.x), int(255 * col.y), int(255 * col.z), 255)
+            triangle_filled_z(surface, p1s, p2s, p3s, c255, zbuf)
+
+
+def draw_primitive(
+    surface,
+    prim: Primitive,
+    world_mat: Mat4,
+    view_mat: Mat4,
+    proj_mat: Mat4,
+    *,
+    scene: Scene | None = None,
+    zbuf: list[float] | None = None,
+) -> None:
+    draw_model(
+        surface,
+        prim.mesh,
+        prim.material,
+        world_mat @ prim.local_to_world,
+        view_mat,
+        proj_mat,
+        scene=scene,
+        zbuf=zbuf,
+    )

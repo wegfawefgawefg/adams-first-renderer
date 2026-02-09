@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import struct
-from dataclasses import dataclass
 from pathlib import Path
 
 import pygame
@@ -11,7 +10,7 @@ import pygame
 from afr.linalg.mat4 import Mat4
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
-from afr.models.model import Model
+from afr.scene import Material, Mesh, Primitive, SceneData, Texture
 
 
 _COMPONENT_FMT = {
@@ -127,21 +126,7 @@ def _load_image_surface(img_uri: str, base_dir: Path):
     if pygame.display.get_surface() is not None:
         surf = surf.convert_alpha()
     return surf
-
-
-@dataclass
-class Primitive:
-    model: Model
-    texture: object | None
-    local_mat: Mat4
-
-    def __iter__(self):
-        yield self.model
-        yield self.texture
-        yield self.local_mat
-
-
-def load_gltf_scene(path: str | Path) -> list[Primitive]:
+def load_gltf_scene(path: str | Path) -> SceneData:
     """Load a subset of glTF 2.0 (enough to view textured static meshes).
 
     Supports:
@@ -163,26 +148,32 @@ def load_gltf_scene(path: str | Path) -> list[Primitive]:
 
     image_surfaces: list[object | None] = [None] * len(images)
 
-    def tex_for_material(mat_idx: int) -> object | None:
+    def material_for_index(mat_idx: int) -> Material:
+        m = Material()
         if mat_idx is None or mat_idx < 0 or mat_idx >= len(materials):
-            return None
+            return m
         mat = materials[mat_idx]
+        m.name = mat.get("name", m.name)
         pbr = mat.get("pbrMetallicRoughness", {})
+        bcf = pbr.get("baseColorFactor")
+        if bcf and len(bcf) >= 3:
+            m.base_color = Vec3(float(bcf[0]), float(bcf[1]), float(bcf[2]))
         bct = pbr.get("baseColorTexture")
         if not bct:
-            return None
+            return m
         tex_idx = int(bct.get("index", -1))
         if tex_idx < 0 or tex_idx >= len(textures):
-            return None
+            return m
         src_idx = int(textures[tex_idx].get("source", -1))
         if src_idx < 0 or src_idx >= len(images):
-            return None
+            return m
         if image_surfaces[src_idx] is None:
             uri = images[src_idx].get("uri")
             if uri is None:
-                return None
+                return m
             image_surfaces[src_idx] = _load_image_surface(uri, base_dir)
-        return image_surfaces[src_idx]
+        m.base_color_tex = Texture(image_surfaces[src_idx])
+        return m
 
     # Traverse the scene graph and collect primitives.
     nodes = gltf.get("nodes", [])
@@ -210,27 +201,25 @@ def load_gltf_scene(path: str | Path) -> list[Primitive]:
                     continue
 
                 positions = _read_accessor(gltf, buffers, int(pos_idx))
-                uvs = _read_accessor(gltf, buffers, int(uv_idx)) if uv_idx is not None else None
+                uvs = (
+                    _read_accessor(gltf, buffers, int(uv_idx))
+                    if uv_idx is not None
+                    else None
+                )
                 indices = _read_accessor(gltf, buffers, int(ind_idx))
-
-                verts = [Vec3(x, y, z) for (x, y, z) in positions]
-                faces = []
-                face_uvs = []
 
                 # indices accessor is SCALAR; may be uint/ushort.
                 flat = [int(i[0]) for i in indices]
-                for i in range(0, len(flat), 3):
-                    i1, i2, i3 = flat[i], flat[i + 1], flat[i + 2]
-                    faces.append((i1, i2, i3))
-                    if uvs is not None:
-                        u1, v1 = uvs[i1]
-                        u2, v2 = uvs[i2]
-                        u3, v3 = uvs[i3]
-                        face_uvs.append((Vec2(u1, v1), Vec2(u2, v2), Vec2(u3, v3)))
+                faces = [
+                    (flat[i], flat[i + 1], flat[i + 2]) for i in range(0, len(flat), 3)
+                ]
 
-                model = Model(verts=verts, faces=faces, uvs=face_uvs if face_uvs else [])
-                tex = tex_for_material(prim.get("material", -1))
-                prims.append(Primitive(model=model, texture=tex, local_mat=world))
+                verts = [Vec3(x, y, z) for (x, y, z) in positions]
+                uv_verts = [Vec2(u, v) for (u, v) in uvs] if uvs is not None else None
+                mesh_obj = Mesh(positions=verts, uvs=uv_verts, indices=faces)
+
+                mat = material_for_index(int(prim.get("material", -1)))
+                prims.append(Primitive(mesh=mesh_obj, material=mat, local_to_world=world))
 
         for child in node.get("children", []):
             visit(int(child), world)
@@ -239,4 +228,4 @@ def load_gltf_scene(path: str | Path) -> list[Primitive]:
     for n in root_nodes:
         visit(int(n), ident)
 
-    return prims
+    return SceneData(primitives=prims)

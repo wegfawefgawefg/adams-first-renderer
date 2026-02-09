@@ -24,7 +24,7 @@ def do_inputs(app_state, dt: float) -> bool:
             return False
 
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_ESCAPE, pygame.K_q):
+            if event.key == pygame.K_ESCAPE:
                 return False
 
             if event.key == pygame.K_m:
@@ -93,4 +93,3 @@ def do_inputs(app_state, dt: float) -> bool:
         app_state.cam_pos = app_state.cam_pos + move * (speed * dt)
 
     return True
-
