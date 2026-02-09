@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections import deque
 
+import pygame
+
 DEFERRED_PLOTTING = False
 
 # Deferred plotting drain rate (pixels per second).
@@ -43,3 +45,17 @@ class AppState:
     # Cached resources for draw().
     cube_model: object | None = None
     kirby_tex: object | None = None
+
+
+from pathlib import Path
+from afr.models import Model
+
+
+def load(app_state: AppState) -> None:
+    model_path = (
+        Path(__file__).resolve().parents[2] / "assets" / "models" / "cube.afrmodel"
+    )
+    app_state.cube_model = Model.load(model_path)
+
+    tex_path = Path(__file__).resolve().parents[2] / "assets" / "textures" / "kirby.png"
+    app_state.kirby_tex = pygame.image.load(str(tex_path)).convert_alpha()

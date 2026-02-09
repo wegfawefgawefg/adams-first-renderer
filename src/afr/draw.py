@@ -1,11 +1,9 @@
 import pygame
 import glm
 
-from pathlib import Path
 
 from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
-from afr.models import Model
 from afr.settings import RES, WINDOW_RES
 from afr.primitives import *
 from afr.colors import *
@@ -57,12 +55,6 @@ def draw(surface, app_state):
     center = RES / 2
     # point(surface, center)
 
-    if app_state.cube_model is None:
-        model_path = (
-            Path(__file__).resolve().parents[2] / "assets" / "models" / "cube.afrmodel"
-        )
-        app_state.cube_model = Model.load(model_path)
-
     cube_verts = [v.clone() for v in app_state.cube_model.verts]
     cube_faces_tris = app_state.cube_model.faces
     cube_faces_uvs = app_state.cube_model.uvs
@@ -91,11 +83,6 @@ def draw(surface, app_state):
     sw = surface.get_width()
     sh = surface.get_height()
     zbuf = [float("inf")] * (sw * sh)
-
-    if app_state.kirby_tex is None:
-        # draw.py is at repo_root/src/afr/draw.py
-        tex_path = Path(__file__).resolve().parents[2] / "assets" / "textures" / "kirby.png"
-        app_state.kirby_tex = pygame.image.load(str(tex_path)).convert_alpha()
 
     for (i1, i2, i3), (t1, t2, t3) in zip(cube_faces_tris, cube_faces_uvs):
         p1, p2, p3 = cube_verts[i1], cube_verts[i2], cube_verts[i3]

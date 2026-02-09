@@ -8,6 +8,7 @@ from afr.draw import draw
 from afr.core_rendering import draw_some_points
 from afr.linalg.vec2 import Vec2
 import afr.state as state
+from afr.state import load
 
 
 def main(argv: list[str] | None = None):
@@ -61,6 +62,7 @@ def main(argv: list[str] | None = None):
     # Use an RGBA surface so textured triangles can alpha-blend correctly.
     render_surface = pygame.Surface(RES.to_tuple(), flags=pygame.SRCALPHA, depth=32)
     app_state = state.AppState()
+    load(app_state)
 
     if args.bench_blit:
         # Pre-fill a lot of pixels so the queue stays non-empty long enough to
