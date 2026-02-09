@@ -1,5 +1,6 @@
 import math
 from afr.linalg.vec2 import Vec2
+from afr.linalg.vec3 import Vec3
 import afr.state as state
 
 
@@ -97,6 +98,153 @@ def triangle_filled(surface, a, b, c, col):
 
             if inside:
                 cpoint(surface, Vec2(x, y), col)
+
+
+def triangle_filled_z(surface, a, b, c, col, zbuf):
+    """Filled triangle with a simple Z-buffer (CPU).
+
+    Inputs `a`, `b`, `c` are Vec3 where:
+    - x,y are screen coordinates in pixels
+    - z is depth (smaller z = closer)
+
+    `zbuf` is a flat list of size (w*h) holding the closest z seen so far.
+    """
+    w = surface.get_width()
+    h = surface.get_height()
+
+    min_x = int(max(0, math.floor(min(a.x, b.x, c.x))))
+    max_x = int(min(w - 1, math.ceil(max(a.x, b.x, c.x))))
+    min_y = int(max(0, math.floor(min(a.y, b.y, c.y))))
+    max_y = int(min(h - 1, math.ceil(max(a.y, b.y, c.y))))
+
+    if min_x > max_x or min_y > max_y:
+        return
+
+    def edge(p0, p1, x, y):
+        return (x - p0.x) * (p1.y - p0.y) - (y - p0.y) * (p1.x - p0.x)
+
+    area = edge(a, b, c.x, c.y)
+    if area == 0:
+        return
+
+    inv_area = 1.0 / area
+
+    for y in range(min_y, max_y + 1):
+        py = y + 0.5
+        row = y * w
+        for x in range(min_x, max_x + 1):
+            px = x + 0.5
+            w0 = edge(b, c, px, py)
+            w1 = edge(c, a, px, py)
+            w2 = edge(a, b, px, py)
+
+            if area > 0:
+                inside = w0 >= 0 and w1 >= 0 and w2 >= 0
+            else:
+                inside = w0 <= 0 and w1 <= 0 and w2 <= 0
+
+            if not inside:
+                continue
+
+            # Barycentric weights (sum to 1).
+            alpha = w0 * inv_area
+            beta = w1 * inv_area
+            gamma = w2 * inv_area
+            z = alpha * a.z + beta * b.z + gamma * c.z
+
+            idx = row + x
+            if z < zbuf[idx]:
+                zbuf[idx] = z
+                cpoint(surface, Vec2(x, y), col)
+
+
+def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.0):
+    """Textured triangle with a simple Z-buffer (CPU).
+
+    Inputs `a`, `b`, `c` are Vec3 where:
+    - x,y are screen coordinates in pixels
+    - z is depth (smaller z = closer)
+
+    UVs are Vec2 in [0..1] (no wrapping, clamped).
+    `shade` multiplies the sampled texture color (simple lighting).
+    """
+    w = surface.get_width()
+    h = surface.get_height()
+
+    min_x = int(max(0, math.floor(min(a.x, b.x, c.x))))
+    max_x = int(min(w - 1, math.ceil(max(a.x, b.x, c.x))))
+    min_y = int(max(0, math.floor(min(a.y, b.y, c.y))))
+    max_y = int(min(h - 1, math.ceil(max(a.y, b.y, c.y))))
+
+    if min_x > max_x or min_y > max_y:
+        return
+
+    tw = texture.get_width()
+    th = texture.get_height()
+
+    def edge(p0, p1, x, y):
+        return (x - p0.x) * (p1.y - p0.y) - (y - p0.y) * (p1.x - p0.x)
+
+    area = edge(a, b, c.x, c.y)
+    if area == 0:
+        return
+
+    inv_area = 1.0 / area
+
+    # Pre-clamp shade.
+    shade = max(0.0, float(shade))
+
+    for y in range(min_y, max_y + 1):
+        py = y + 0.5
+        row = y * w
+        for x in range(min_x, max_x + 1):
+            px = x + 0.5
+            w0 = edge(b, c, px, py)
+            w1 = edge(c, a, px, py)
+            w2 = edge(a, b, px, py)
+
+            if area > 0:
+                inside = w0 >= 0 and w1 >= 0 and w2 >= 0
+            else:
+                inside = w0 <= 0 and w1 <= 0 and w2 <= 0
+
+            if not inside:
+                continue
+
+            alpha = w0 * inv_area
+            beta = w1 * inv_area
+            gamma = w2 * inv_area
+
+            z = alpha * a.z + beta * b.z + gamma * c.z
+            idx = row + x
+            if z >= zbuf[idx]:
+                continue
+            zbuf[idx] = z
+
+            u = alpha * uva.x + beta * uvb.x + gamma * uvc.x
+            v = alpha * uva.y + beta * uvb.y + gamma * uvc.y
+
+            # Clamp (no wrapping for now).
+            if u < 0.0:
+                u = 0.0
+            elif u > 1.0:
+                u = 1.0
+            if v < 0.0:
+                v = 0.0
+            elif v > 1.0:
+                v = 1.0
+
+            tx = int(u * (tw - 1))
+            ty = int(v * (th - 1))
+            r, g, b_, a_ = texture.get_at((tx, ty))
+            if a_ == 0:
+                continue
+
+            cpoint(
+                surface,
+                Vec2(x, y),
+                (min(255, int(r * shade)), min(255, int(g * shade)), min(255, int(b_ * shade))),
+            )
 
 
 def triangle_filled_scanline(surface, a, b, c, col):

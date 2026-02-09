@@ -1,11 +1,16 @@
 import pygame
 import glm
 
+from pathlib import Path
+
+from afr.linalg.vec2 import Vec2
 from afr.linalg.vec3 import Vec3
 from afr.settings import RES, WINDOW_RES
 from afr.primitives import *
 from afr.colors import *
 import afr.state as state
+
+_kirby_tex = None
 
 """ we are inventing these from scratch for education 
 ## lines
@@ -67,20 +72,47 @@ def draw(surface):
         Vec3(-1, 1, 1),
     ]
 
-    # faces
+    # faces (triangles), CCW winding when viewed from outside (outward normals).
+    #
+    # Each cube face is 2 triangles. We give each face a simple 0..1 UV square.
+    uv_a = Vec2(0.0, 0.0)
+    uv_b = Vec2(0.0, 1.0)
+    uv_c = Vec2(1.0, 1.0)
+    uv_d = Vec2(1.0, 0.0)
+
     cube_faces_tris = [
-        (0, 1, 2),
-        (0, 2, 3),
-        (1, 5, 6),
-        (1, 6, 2),
-        (5, 4, 7),
-        (5, 7, 6),
-        (4, 0, 3),
-        (4, 3, 7),
-        (3, 2, 6),
-        (3, 6, 7),
-        (4, 5, 1),
-        (4, 1, 0),
+        # z = -1 (back)
+        (0, 2, 1),
+        (0, 3, 2),
+        # x = +1 (right)
+        (1, 6, 5),
+        (1, 2, 6),
+        # z = +1 (front)
+        (5, 7, 4),
+        (5, 6, 7),
+        # x = -1 (left)
+        (4, 3, 0),
+        (4, 7, 3),
+        # y = +1 (top)
+        (3, 6, 2),
+        (3, 7, 6),
+        # y = -1 (bottom)
+        (4, 1, 5),
+        (4, 0, 1),
+    ]
+    cube_faces_uvs = [
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
+        (uv_a, uv_c, uv_d),
+        (uv_a, uv_b, uv_c),
     ]
 
     scale = Vec3.splat(20)
@@ -96,57 +128,40 @@ def draw(surface):
         p = p + center_3d
         cube_verts[i] = p
 
-        # draw point
-        # cpoint(surface, Vec2(p.x, p.y), RED)
-
-    # draw triangles as lines
-    # for v1, v2, v3 in cube_faces_tris:
-    #     p1 = cube_verts[v1]
-    #     p2 = cube_verts[v2]
-    #     p3 = cube_verts[v3]
-    #     line(surface, Vec2(p1.x, p1.y), Vec2(p2.x, p2.y), GREEN)
-    #     line(surface, Vec2(p2.x, p2.y), Vec2(p3.x, p3.y), GREEN)
-    #     line(surface, Vec2(p3.x, p3.y), Vec2(p1.x, p1.y), GREEN)
-
-    light_pos = Vec3(0.0, 0.0, 5.0)
-    light_color = Vec3(0.0, 0.0, 255)
-    # light color varies over time
-    # light_color = Vec3(
-    #     (math.sin(pygame.time.get_ticks() / 1000.0) + 1) / 2,
-    #     (math.sin(pygame.time.get_ticks() / 1000.0 + 2) + 1) / 2,
-    #     (math.sin(pygame.time.get_ticks() / 1000.0 + 4) + 1) / 2,
-    # )
-
+    # Approx camera is in front of the screen looking toward the origin.
+    # Put the light at the camera so faces oriented toward us are bright.
+    camera_pos = center_3d + Vec3(0.0, 0.0, -200.0)
+    light_pos = camera_pos
     l = light_pos
 
-    # sort faces by center z
-    def face_z(face):
-        v1, v2, v3 = face
-        p1 = cube_verts[v1]
-        p2 = cube_verts[v2]
-        p3 = cube_verts[v3]
-        return (p1.z + p2.z + p3.z) / 3.0
+    # Simple Z-buffer for correct visibility (prevents "missing triangles"
+    # caused by painter sorting edge-cases).
+    sw = surface.get_width()
+    sh = surface.get_height()
+    zbuf = [float("inf")] * (sw * sh)
 
-    cube_faces_tris.sort(key=face_z, reverse=True)
+    global _kirby_tex
+    if _kirby_tex is None:
+        # draw.py is at repo_root/src/afr/draw.py
+        tex_path = Path(__file__).resolve().parents[2] / "assets" / "kirby.png"
+        _kirby_tex = pygame.image.load(str(tex_path)).convert_alpha()
 
-    # do with filled triangle
-    for v1, v2, v3 in cube_faces_tris:
-        p1 = cube_verts[v1]
-        p2 = cube_verts[v2]
-        p3 = cube_verts[v3]
+    for (i1, i2, i3), (t1, t2, t3) in zip(cube_faces_tris, cube_faces_uvs):
+        p1, p2, p3 = cube_verts[i1], cube_verts[i2], cube_verts[i3]
 
-        u = (p2 - p1).norm()
-        v = (p3 - p1).norm()
-        face_normal = u.cross(v).norm()
+        face_normal = (p2 - p1).cross(p3 - p1).norm()
         face_center = (p1 + p2 + p3) * (1.0 / 3.0)
         face_to_light = (l - face_center).norm()
-        brightness = max(0.1, face_normal.dot(face_to_light))
-        c = brightness * light_color
-
-        triangle_filled(
+        brightness = max(0.15, face_normal.dot(face_to_light))
+        triangle_textured_z(
             surface,
-            Vec2(p1.x, p1.y),
-            Vec2(p2.x, p2.y),
-            Vec2(p3.x, p3.y),
-            c.to_tuple(),
+            p1,
+            p2,
+            p3,
+            t1,
+            t2,
+            t3,
+            _kirby_tex,
+            zbuf,
+            shade=brightness,
         )
