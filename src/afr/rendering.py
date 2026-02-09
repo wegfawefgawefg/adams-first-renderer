@@ -48,14 +48,15 @@ def ortho_for_surface(
     return Mat4.ortho(-half_width, half_width, -half_height, half_height, near, far)
 
 
-def shade_flat(scene: Scene, normal_ws: Vec3, pos_ws: Vec3) -> float:
+def shade_flat(scene: Scene, normal_ws: Vec3, pos_ws: Vec3) -> Vec3:
     n = normal_ws.norm()
-    s = float(scene.ambient)
+    s = Vec3.splat(float(scene.ambient))
     for light in scene.lights:
         ldir = (light.pos - pos_ws).norm()
-        s += max(0.0, n.dot(ldir)) * float(light.intensity)
-    # clamp 0..1-ish (let it go above 1.0 if you want "hot" lights later)
-    return max(0.0, s)
+        ndotl = max(0.0, n.dot(ldir)) * float(light.intensity)
+        s = s + (light.color * ndotl)
+    # clamp >= 0 (let it go above 1.0 if you want "hot" lights later)
+    return s.clamp(0.0, 1e9)
 
 
 def draw_model(
@@ -93,7 +94,7 @@ def draw_model(
             c = (p1w + p2w + p3w) * (1.0 / 3.0)
             shade = shade_flat(scene, n, c)
         else:
-            shade = 1.0
+            shade = Vec3.splat(1.0)
 
         if use_tex:
             uv1, uv2, uv3 = model.uvs[fi]
@@ -102,5 +103,6 @@ def draw_model(
             )
         else:
             # grayscale from shade for now if no texture
-            g = max(0, min(255, int(255 * min(shade, 1.0))))
+            avg = (shade.x + shade.y + shade.z) * (1.0 / 3.0)
+            g = max(0, min(255, int(255 * min(avg, 1.0))))
             triangle_filled_z(surface, p1s, p2s, p3s, (g, g, g, 255), zbuf)

@@ -44,8 +44,7 @@ PLOT = plot_immediate
 @dataclass
 class AppState:
     # Cached resources for draw().
-    cube_model: object | None = None
-    kirby_tex: object | None = None
+    scene_prims: list | None = None  # list of (Model, pygame.Surface|None, Mat4)
 
     # Fly camera (world space).
     cam_pos: object | None = None
@@ -56,25 +55,22 @@ class AppState:
 
 
 from pathlib import Path
-from afr.models import Model
 from afr.linalg.vec3 import Vec3
+from afr.models.gltf import load_gltf_scene
 
 
 def load(app_state: AppState) -> None:
-    model_path = (
-        Path(__file__).resolve().parents[2] / "assets" / "models" / "cube.afrmodel"
-    )
-    app_state.cube_model = Model.load(model_path)
-
-    tex_path = (
-        Path(__file__).resolve().parents[2] / "assets" / "textures" / "kirby.png"
-    )
-    tex = pygame.image.load(str(tex_path))
-    # convert_alpha requires a video mode; keep it optional so this loader can
-    # be used in headless tests/tools.
-    if pygame.display.get_surface() is not None:
-        tex = tex.convert_alpha()
-    app_state.kirby_tex = tex
+    if app_state.scene_prims is None:
+        gltf_path = (
+            Path(__file__).resolve().parents[2]
+            / "assets"
+            / "models"
+            / "mario-64-mario"
+            / "source"
+            / "prototype_mario_super_mario_64"
+            / "scene.gltf"
+        )
+        app_state.scene_prims = load_gltf_scene(gltf_path)
 
     if app_state.cam_pos is None:
-        app_state.cam_pos = Vec3(0.0, 0.0, 5.0)
+        app_state.cam_pos = Vec3(0.0, 1.5, 8.0)

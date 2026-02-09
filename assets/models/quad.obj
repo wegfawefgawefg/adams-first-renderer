@@ -1,0 +1,19 @@
+# Rectangle made of two triangles with normals
+
+mtllib quad.mtl
+o quad
+
+v -1.0  1.0 0.0  # Vertex 1
+v -1.0 -1.0 0.0  # Vertex 2
+v  1.0 -1.0 0.0  # Vertex 3
+v  1.0  1.0 0.0  # Vertex 4
+
+vt 0.0 0.0  # UV coord for Vertex 1
+vt 0.0 1.0  # UV coord for Vertex 2
+vt 1.0 1.0  # UV coord for Vertex 3
+vt 1.0 0.0  # UV coord for Vertex 4
+
+vn 0.0 0.0 -1.0  # Normal for all vertices (pointing in +Z direction)
+
+f 1/1/1 4/4/1 2/2/1  # First triangle (v1, v4, v2)
+f 4/4/1 3/3/1 2/2/1  # Second triangle (v4, v3, v2)

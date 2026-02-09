@@ -191,8 +191,13 @@ def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.
 
     inv_area = 1.0 / area
 
-    # Pre-clamp shade.
-    shade = max(0.0, float(shade))
+    # Shade can be float or Vec3 (rgb multipliers).
+    if isinstance(shade, (int, float)):
+        shade_r = shade_g = shade_b = max(0.0, float(shade))
+    else:
+        shade_r = max(0.0, float(shade.x))
+        shade_g = max(0.0, float(shade.y))
+        shade_b = max(0.0, float(shade.z))
 
     for y in range(min_y, max_y + 1):
         py = y + 0.5
@@ -240,9 +245,9 @@ def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.
             if a_ == 0:
                 continue
 
-            sr = min(255, int(r * shade))
-            sg = min(255, int(g * shade))
-            sb = min(255, int(b_ * shade))
+            sr = min(255, int(r * shade_r))
+            sg = min(255, int(g * shade_g))
+            sb = min(255, int(b_ * shade_b))
 
             # Deferred plotting can't blend (no destination pixel yet).
             if state.PLOT is state.plot_deferred or a_ == 255:

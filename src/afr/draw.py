@@ -51,14 +51,9 @@ def draw_mouse_coords(surface):
 
 
 def draw(surface, app_state):
-    model = app_state.cube_model
-    tex = app_state.kirby_tex
-
-    t = pygame.time.get_ticks() / 1000.0
-    angle = t * 0.5
-
     # Camera from AppState (world space).
     import math
+    t = pygame.time.get_ticks() / 1000.0
 
     cy = math.cos(app_state.cam_yaw)
     sy = math.sin(app_state.cam_yaw)
@@ -84,25 +79,40 @@ def draw(surface, app_state):
         surface.get_width(), surface.get_height(), half_height=6.0, near=0.1, far=100.0
     )
 
-    scene = Scene(lights=[PointLight(pos=cam.pos, intensity=1.0)], ambient=0.15)
+    # A few colored point lights rotating around the model (world space).
+    r = 35.0
+    y = 20.0
+    lights = [
+        PointLight(
+            pos=Vec3(math.cos(t * 0.8) * r, y, math.sin(t * 0.8) * r),
+            color=Vec3(1.0, 0.2, 0.2),
+            intensity=0.9,
+        ),
+        PointLight(
+            pos=Vec3(math.cos(t * 0.8 + 2.1) * r, y, math.sin(t * 0.8 + 2.1) * r),
+            color=Vec3(0.2, 1.0, 0.2),
+            intensity=0.9,
+        ),
+        PointLight(
+            pos=Vec3(math.cos(t * 0.8 + 4.2) * r, y, math.sin(t * 0.8 + 4.2) * r),
+            color=Vec3(0.2, 0.4, 1.0),
+            intensity=0.9,
+        ),
+        # Small white fill at the camera to keep the front readable.
+        PointLight(pos=cam.pos, color=Vec3.splat(1.0), intensity=0.25),
+    ]
+    scene = Scene(lights=lights, ambient=0.10)
 
     # Z-buffer per frame (CPU), shared across all cubes.
     zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
 
-    # Kirby cube of Kirby cubes: 2x2x2 instances.
-    spacing = 3.0
-    offsets = (-0.5, 0.5)
-    for ox in offsets:
-        for oy in offsets:
-            for oz in offsets:
-                pos = Vec3(ox * spacing, oy * spacing, oz * spacing)
-                model_mat = (
-                    Mat4.translate(pos.x, pos.y, pos.z)
-                    @ Mat4.rotate_x(angle)
-                    @ Mat4.rotate_y(angle * 0.5)
-                    @ Mat4.rotate_z(angle * 0.25)
-                    @ Mat4.scale(1.0)
-                )
-                draw_model(
-                    surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
-                )
+    # Draw loaded glTF primitives (Mario). Each primitive has its own local matrix and texture.
+    root_model_mat = (
+        Mat4.scale(10.0)
+    )
+    for prim in app_state.scene_prims or []:
+        model, tex, local_mat = prim
+        model_mat = root_model_mat @ local_mat
+        draw_model(
+            surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
+        )
