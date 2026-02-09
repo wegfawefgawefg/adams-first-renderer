@@ -33,6 +33,89 @@ class Scene:
     ambient: float = 0.15
 
 
+@dataclass
+class _ClipVert:
+    clip: Vec4
+    uv: Vec2 | None = None
+
+
+def _clip_poly_against_plane(poly: list[_ClipVert], dist_fn) -> list[_ClipVert]:
+    """Sutherland–Hodgman clipper for a convex polygon against one clip plane.
+
+    `dist_fn(v.clip)` should return >= 0 for inside.
+    """
+    if not poly:
+        return []
+
+    out: list[_ClipVert] = []
+    prev = poly[-1]
+    prev_d = float(dist_fn(prev.clip))
+    prev_in = prev_d >= 0.0
+
+    for cur in poly:
+        cur_d = float(dist_fn(cur.clip))
+        cur_in = cur_d >= 0.0
+
+        if prev_in and cur_in:
+            # In -> In: keep current.
+            out.append(cur)
+        elif prev_in and not cur_in:
+            # In -> Out: add intersection.
+            denom = (prev_d - cur_d)
+            if denom != 0.0:
+                t = prev_d / denom
+                iclip = prev.clip + (cur.clip - prev.clip) * t
+                if prev.uv is not None and cur.uv is not None:
+                    iuv = prev.uv + (cur.uv - prev.uv) * t
+                else:
+                    iuv = None
+                out.append(_ClipVert(iclip, iuv))
+        elif (not prev_in) and cur_in:
+            # Out -> In: add intersection then current.
+            denom = (prev_d - cur_d)
+            if denom != 0.0:
+                t = prev_d / denom
+                iclip = prev.clip + (cur.clip - prev.clip) * t
+                if prev.uv is not None and cur.uv is not None:
+                    iuv = prev.uv + (cur.uv - prev.uv) * t
+                else:
+                    iuv = None
+                out.append(_ClipVert(iclip, iuv))
+            out.append(cur)
+        else:
+            # Out -> Out: nothing.
+            pass
+
+        prev = cur
+        prev_d = cur_d
+        prev_in = cur_in
+
+    return out
+
+
+def _clip_triangle(poly: list[_ClipVert]) -> list[_ClipVert]:
+    """Clip a triangle (as a 3-vertex polygon) against the full clip volume."""
+    # OpenGL-style clip volume:
+    #   -w <= x <= w
+    #   -w <= y <= w
+    #   -w <= z <= w
+    planes = [
+        lambda c: c.x + c.w,  # left
+        lambda c: -c.x + c.w,  # right
+        lambda c: c.y + c.w,  # bottom
+        lambda c: -c.y + c.w,  # top
+        lambda c: c.z + c.w,  # near
+        lambda c: -c.z + c.w,  # far
+    ]
+
+    out = poly
+    for p in planes:
+        out = _clip_poly_against_plane(out, p)
+        if len(out) < 3:
+            return []
+    return out
+
+
 def ndc_to_screen(ndc: Vec3, w: int, h: int) -> Vec3:
     # Map NDC [-1,1] to pixel coords [0,w-1] and [0,h-1].
     x = (ndc.x * 0.5 + 0.5) * (w - 1)
@@ -80,35 +163,28 @@ def draw_model(
     verts_ms = mesh.positions
     verts_ws = [model_mat @ v for v in verts_ms]
 
-    # IMPORTANT: don't use Mat4@Vec3 here because it divides by w automatically.
-    # With perspective, triangles that cross behind the camera (w <= 0) will
-    # produce huge screen-space coordinates if we don't clip/reject first.
+    # Clip-space coordinates (no perspective divide yet).
     verts_clip = [viewproj @ Vec4(v.x, v.y, v.z, 1.0) for v in verts_ws]
-    verts_ndc: list[Vec3] = []
-    for c in verts_clip:
-        if c.w == 0.0:
-            verts_ndc.append(Vec3(0.0, 0.0, 0.0))
-        else:
-            invw = 1.0 / float(c.w)
-            verts_ndc.append(Vec3(float(c.x) * invw, float(c.y) * invw, float(c.z) * invw))
-    verts_ss = [ndc_to_screen(v, sw, sh) for v in verts_ndc]
 
     tex_surface = material.base_color_tex.surface if material.base_color_tex else None
     use_tex = tex_surface is not None and mesh.uvs is not None
     use_scene = scene is not None
 
     for (i1, i2, i3) in mesh.indices:
-        # Crude near-plane handling: reject triangles with any vertex behind the camera.
-        # Proper clipping would slice the triangle against the near plane; this is
-        # good enough to prevent the "full screen giant triangle" glitch.
-        if (
-            verts_clip[i1].w <= 1e-6
-            or verts_clip[i2].w <= 1e-6
-            or verts_clip[i3].w <= 1e-6
-        ):
-            continue
+        if use_tex:
+            uv1, uv2, uv3 = mesh.uvs[i1], mesh.uvs[i2], mesh.uvs[i3]
+        else:
+            uv1 = uv2 = uv3 = None
 
-        p1s, p2s, p3s = verts_ss[i1], verts_ss[i2], verts_ss[i3]
+        poly = _clip_triangle(
+            [
+                _ClipVert(verts_clip[i1], uv1),
+                _ClipVert(verts_clip[i2], uv2),
+                _ClipVert(verts_clip[i3], uv3),
+            ]
+        )
+        if len(poly) < 3:
+            continue
 
         # Flat normal in world space for now.
         if use_scene:
@@ -119,16 +195,44 @@ def draw_model(
         else:
             shade = Vec3.splat(1.0)
 
-        if use_tex:
-            uv1, uv2, uv3 = mesh.uvs[i1], mesh.uvs[i2], mesh.uvs[i3]
-            shade = shade * material.base_color
-            triangle_textured_z(
-                surface, p1s, p2s, p3s, uv1, uv2, uv3, tex_surface, zbuf, shade=shade
-            )
-        else:
-            col = (shade * material.base_color).clamp(0.0, 1.0)
-            c255 = (int(255 * col.x), int(255 * col.y), int(255 * col.z), 255)
-            triangle_filled_z(surface, p1s, p2s, p3s, c255, zbuf)
+        # Triangulate the clipped polygon (fan).
+        v0 = poly[0]
+        for k in range(1, len(poly) - 1):
+            va = v0
+            vb = poly[k]
+            vc = poly[k + 1]
+
+            # Perspective divide for each vertex -> NDC.
+            if va.clip.w == 0.0 or vb.clip.w == 0.0 or vc.clip.w == 0.0:
+                continue
+
+            a_ndc = va.clip.to_vec3(perspective_divide=True)
+            b_ndc = vb.clip.to_vec3(perspective_divide=True)
+            c_ndc = vc.clip.to_vec3(perspective_divide=True)
+            p1s = ndc_to_screen(a_ndc, sw, sh)
+            p2s = ndc_to_screen(b_ndc, sw, sh)
+            p3s = ndc_to_screen(c_ndc, sw, sh)
+
+            if use_tex:
+                if va.uv is None or vb.uv is None or vc.uv is None:
+                    continue
+                tri_shade = shade * material.base_color
+                triangle_textured_z(
+                    surface,
+                    p1s,
+                    p2s,
+                    p3s,
+                    va.uv,
+                    vb.uv,
+                    vc.uv,
+                    tex_surface,
+                    zbuf,
+                    shade=tri_shade,
+                )
+            else:
+                col = (shade * material.base_color).clamp(0.0, 1.0)
+                c255 = (int(255 * col.x), int(255 * col.y), int(255 * col.z), 255)
+                triangle_filled_z(surface, p1s, p2s, p3s, c255, zbuf)
 
 
 def draw_primitive(

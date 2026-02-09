@@ -52,7 +52,6 @@ def draw_mouse_coords(surface):
 
 def draw(surface, app_state):
     import math
-    t = pygame.time.get_ticks() / 1000.0
 
     world_up = Vec3(0.0, 1.0, 0.0)
 
@@ -83,32 +82,15 @@ def draw(surface, app_state):
     aspect = (w / h) if h else 1.0
     proj = Mat4.perspective(math.radians(65.0), aspect, 0.1, 5000.0)
 
-    # A few colored point lights rotating around Mario (world space).
-    center = mario_pos + Vec3(0.0, 1.0, 0.0)
-    r = 12.0
-    y = 6.0
+    # Simple "sun" light: high in the sky, bright, slightly warm.
     lights = [
         PointLight(
-            pos=center + Vec3(math.cos(t * 0.8) * r, y, math.sin(t * 0.8) * r),
-            color=Vec3(1.0, 0.2, 0.2),
-            intensity=0.9,
-        ),
-        PointLight(
-            pos=center
-            + Vec3(math.cos(t * 0.8 + 2.1) * r, y, math.sin(t * 0.8 + 2.1) * r),
-            color=Vec3(0.2, 1.0, 0.2),
-            intensity=0.9,
-        ),
-        PointLight(
-            pos=center
-            + Vec3(math.cos(t * 0.8 + 4.2) * r, y, math.sin(t * 0.8 + 4.2) * r),
-            color=Vec3(0.2, 0.4, 1.0),
-            intensity=0.9,
-        ),
-        # Small white fill at the camera to keep the front readable.
-        PointLight(pos=cam.pos, color=Vec3.splat(1.0), intensity=0.25),
+            pos=Vec3(200.0, 500.0, 150.0),
+            color=Vec3(1.0, 0.98, 0.92),
+            intensity=1.4,
+        )
     ]
-    scene = Scene(lights=lights, ambient=0.10)
+    scene = Scene(lights=lights, ambient=0.22)
 
     # Z-buffer per frame (CPU), shared across all cubes.
     zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
