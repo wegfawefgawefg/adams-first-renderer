@@ -6,6 +6,10 @@ class Vec3:
     def __init__(self, x=0.0, y=0.0, z=0.0):
         self.x, self.y, self.z = x, y, z
 
+    @classmethod
+    def splat(self, v):
+        return Vec3(v, v, v)
+
     def mag(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 

@@ -11,7 +11,7 @@ def cpoint(surface, pos, c):
     state.PLOT(surface, pos, c)
 
 
-def line(surface, a, b):
+def line(surface, a, b, c):
     xd = b.x - a.x
     yd = b.y - a.y
 
@@ -26,7 +26,7 @@ def line(surface, a, b):
     px = a.x
     py = a.y
     for _ in range(0, num_points + 1):
-        point(surface, Vec2(px, py))
+        cpoint(surface, Vec2(px, py), c)
         px += dx
         py += dy
 
@@ -59,6 +59,93 @@ def triangle(surface, a, b, c):
     line(surface, a, b)
     line(surface, b, c)
     line(surface, a, c)
+
+
+def triangle_filled(surface, a, b, c, col):
+    """Filled triangle rasterization (simple bounding-box + edge test)."""
+    w = surface.get_width()
+    h = surface.get_height()
+
+    min_x = int(max(0, math.floor(min(a.x, b.x, c.x))))
+    max_x = int(min(w - 1, math.ceil(max(a.x, b.x, c.x))))
+    min_y = int(max(0, math.floor(min(a.y, b.y, c.y))))
+    max_y = int(min(h - 1, math.ceil(max(a.y, b.y, c.y))))
+
+    if min_x > max_x or min_y > max_y:
+        return
+
+    def edge(p0, p1, x, y):
+        return (x - p0.x) * (p1.y - p0.y) - (y - p0.y) * (p1.x - p0.x)
+
+    # Determine winding so inside-test works for both CW and CCW input.
+    area = edge(a, b, c.x, c.y)
+    if area == 0:
+        return
+
+    for y in range(min_y, max_y + 1):
+        py = y + 0.5
+        for x in range(min_x, max_x + 1):
+            px = x + 0.5
+            w0 = edge(b, c, px, py)
+            w1 = edge(c, a, px, py)
+            w2 = edge(a, b, px, py)
+
+            if area > 0:
+                inside = w0 >= 0 and w1 >= 0 and w2 >= 0
+            else:
+                inside = w0 <= 0 and w1 <= 0 and w2 <= 0
+
+            if inside:
+                cpoint(surface, Vec2(x, y), col)
+
+
+def triangle_filled_scanline(surface, a, b, c, col):
+    """Filled triangle rasterization (simple scanline fill).
+
+    This is usually less wasteful than the bounding-box method for long/thin
+    triangles because it fills only the horizontal spans that intersect the
+    triangle.
+    """
+    # Degenerate (area ~ 0).
+    if (b - a).cross(c - a) == 0:
+        return
+
+    w = surface.get_width()
+    h = surface.get_height()
+
+    # Sort by Y: v0 (top), v1 (mid), v2 (bottom).
+    v0, v1, v2 = sorted([a, b, c], key=lambda p: p.y)
+
+    def x_at_y(p0, p1, y):
+        dy = p1.y - p0.y
+        if dy == 0:
+            return p0.x
+        t = (y - p0.y) / dy
+        return p0.x + t * (p1.x - p0.x)
+
+    y_start = int(max(0, math.ceil(v0.y)))
+    y_end = int(min(h - 1, math.floor(v2.y)))
+    if y_start > y_end:
+        return
+
+    for y in range(y_start, y_end + 1):
+        # Sample at pixel center in Y.
+        sample_y = y + 0.5
+
+        if sample_y < v1.y:
+            xa = x_at_y(v0, v2, sample_y)
+            xb = x_at_y(v0, v1, sample_y)
+        else:
+            xa = x_at_y(v0, v2, sample_y)
+            xb = x_at_y(v1, v2, sample_y)
+
+        if xa > xb:
+            xa, xb = xb, xa
+
+        x_start = int(max(0, math.ceil(xa)))
+        x_end = int(min(w - 1, math.floor(xb)))
+        for x in range(x_start, x_end + 1):
+            cpoint(surface, Vec2(x, y), col)
 
 
 def lines(surface, ps):

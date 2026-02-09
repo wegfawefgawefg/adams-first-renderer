@@ -1,6 +1,7 @@
 import pygame
 import glm
 
+from afr.linalg.vec3 import Vec3
 from afr.settings import RES, WINDOW_RES
 from afr.primitives import *
 from afr.colors import *
@@ -49,57 +50,103 @@ def draw_mouse_coords(surface):
 
 
 def draw(surface):
-    # Immediate mode: clear and redraw every frame.
-    # a = Vec2(0, 0)
-    # line_shader(surface, a, mouse_pos(), 2, WHITE)
-
     # draw a point in the middle
     center = RES / 2
     # point(surface, center)
 
-    # line demo
-    a = center / 2
-    b = center + a
-    # line(surface, a, b)
-    # line to mouse pos from tl
-    line(surface, Vec2(0, 0), mouse_pos())
+    # cube # centered at 0 # lengths of 1
+    # 8 points pls
+    cube_verts = [
+        Vec3(-1, -1, -1),
+        Vec3(1, -1, -1),
+        Vec3(1, 1, -1),
+        Vec3(-1, 1, -1),
+        Vec3(-1, -1, 1),
+        Vec3(1, -1, 1),
+        Vec3(1, 1, 1),
+        Vec3(-1, 1, 1),
+    ]
 
-    # rect demo
-    # rect(surface, center, 20)
+    # faces
+    cube_faces_tris = [
+        (0, 1, 2),
+        (0, 2, 3),
+        (1, 5, 6),
+        (1, 6, 2),
+        (5, 4, 7),
+        (5, 7, 6),
+        (4, 0, 3),
+        (4, 3, 7),
+        (3, 2, 6),
+        (3, 6, 7),
+        (4, 5, 1),
+        (4, 1, 0),
+    ]
 
-    # triangle demo
-    # a = center / 2
-    # b = center + Vec2(20, -20)
-    # c = center + Vec2(0, 20)
-    # triangle(surface, a, b, c)
+    scale = Vec3.splat(20)
+    center_3d = Vec3(center.x, center.y, 0)
+    angle = pygame.time.get_ticks() / 1000.0 * 0.5  # rotate over time
 
-    # lines demo
-    # polygon_points = [
-    #     center + Vec2(0, -30),
-    #     center + Vec2(25, -10),
-    #     center + Vec2(15, 20),
-    #     center + Vec2(-15, 20),
-    #     center + Vec2(-25, -10),
-    # ]
-    # lines(surface, polygon_points)
+    # transform points in place
+    for i, p in enumerate(cube_verts):
+        p = p * scale
+        p = p.rotate_x(angle)
+        p = p.rotate_y(angle * 0.5)
+        p = p.rotate_z(angle * 0.25)
+        p = p + center_3d
+        cube_verts[i] = p
 
-    # regular polygon demo
-    # center = RES / 2
-    # for i in range(3, 10):
-    #     regular_polygon(surface, center, 50, i)
+        # draw point
+        # cpoint(surface, Vec2(p.x, p.y), RED)
 
-    # circle demo
-    # r = 10
-    # center = RES / 2
-    # circle(surface, center, r)
+    # draw triangles as lines
+    # for v1, v2, v3 in cube_faces_tris:
+    #     p1 = cube_verts[v1]
+    #     p2 = cube_verts[v2]
+    #     p3 = cube_verts[v3]
+    #     line(surface, Vec2(p1.x, p1.y), Vec2(p2.x, p2.y), GREEN)
+    #     line(surface, Vec2(p2.x, p2.y), Vec2(p3.x, p3.y), GREEN)
+    #     line(surface, Vec2(p3.x, p3.y), Vec2(p1.x, p1.y), GREEN)
 
-    # circle raster demo
-    # circle_raster_lines(surface, center, r * 6, WHITE, 1)
+    light_pos = Vec3(0.0, 0.0, 5.0)
+    light_color = Vec3(0.0, 0.0, 255)
+    # light color varies over time
+    # light_color = Vec3(
+    #     (math.sin(pygame.time.get_ticks() / 1000.0) + 1) / 2,
+    #     (math.sin(pygame.time.get_ticks() / 1000.0 + 2) + 1) / 2,
+    #     (math.sin(pygame.time.get_ticks() / 1000.0 + 4) + 1) / 2,
+    # )
 
-    # circle shader demo
-    # r = 40
-    # circle_shader(surface, center, r, WHITE)
+    l = light_pos
 
-    # a = center / 2
-    # b = center + a
-    # line_shader(surface, a, b, 0.1, WHITE)
+    # sort faces by center z
+    def face_z(face):
+        v1, v2, v3 = face
+        p1 = cube_verts[v1]
+        p2 = cube_verts[v2]
+        p3 = cube_verts[v3]
+        return (p1.z + p2.z + p3.z) / 3.0
+
+    cube_faces_tris.sort(key=face_z, reverse=True)
+
+    # do with filled triangle
+    for v1, v2, v3 in cube_faces_tris:
+        p1 = cube_verts[v1]
+        p2 = cube_verts[v2]
+        p3 = cube_verts[v3]
+
+        u = (p2 - p1).norm()
+        v = (p3 - p1).norm()
+        face_normal = u.cross(v).norm()
+        face_center = (p1 + p2 + p3) * (1.0 / 3.0)
+        face_to_light = (l - face_center).norm()
+        brightness = max(0.1, face_normal.dot(face_to_light))
+        c = brightness * light_color
+
+        triangle_filled(
+            surface,
+            Vec2(p1.x, p1.y),
+            Vec2(p2.x, p2.y),
+            Vec2(p3.x, p3.y),
+            c.to_tuple(),
+        )
