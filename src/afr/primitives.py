@@ -192,6 +192,9 @@ def triangle_textured_z(
         return
 
     inv_area = 1.0 / area
+    deferred = state.PLOT is state.plot_deferred
+    tex_get = texture.get_at
+    surf_get = surface.get_at
 
     # Shade can be float or Vec3 (rgb multipliers).
     if isinstance(shade, (int, float)):
@@ -235,8 +238,8 @@ def triangle_textured_z(
             # Real meshes often tile UVs outside [0,1] (e.g. u=8.3). Clamping
             # collapses large triangles to a single texel; default to repeat.
             if wrap:
-                u = u - math.floor(u)
-                v = v - math.floor(v)
+                u = u % 1.0
+                v = v % 1.0
             else:
                 if u < 0.0:
                     u = 0.0
@@ -249,7 +252,7 @@ def triangle_textured_z(
 
             tx = int(u * (tw - 1))
             ty = int(v * (th - 1))
-            r, g, b_, a_ = texture.get_at((tx, ty))
+            r, g, b_, a_ = tex_get((tx, ty))
             if a_ == 0:
                 continue
 
@@ -258,12 +261,12 @@ def triangle_textured_z(
             sb = min(255, int(b_ * shade_b))
 
             # Deferred plotting can't blend (no destination pixel yet).
-            if state.PLOT is state.plot_deferred or a_ == 255:
+            if deferred or a_ == 255:
                 cpoint(surface, Vec2(x, y), (sr, sg, sb, int(a_)))
                 continue
 
             # Alpha blend (source-over) in immediate mode.
-            dr, dg, db, da = surface.get_at((x, y))
+            dr, dg, db, da = surf_get((x, y))
             sa = a_ / 255.0
             inv = 1.0 - sa
             out_r = int(sr * sa + dr * inv)

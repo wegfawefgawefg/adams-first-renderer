@@ -32,9 +32,14 @@ class Primitive:
     mesh: Mesh
     material: Material
     local_to_world: Mat4 = field(default_factory=Mat4.identity)
+    # Backface culling configuration.
+    # Many real assets (especially OBJ) may have inconsistent winding; when in
+    # doubt, set cull_backfaces=False for that primitive.
+    cull_backfaces: bool = True
+    # Front-face winding in NDC (y up). glTF convention is CCW.
+    front_face_ccw: bool = True
 
 
 @dataclass
 class SceneData:
     primitives: list[Primitive]
-

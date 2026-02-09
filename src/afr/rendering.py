@@ -9,6 +9,8 @@ from afr.linalg.vec4 import Vec4
 from afr.scene import Mesh, Material, Primitive
 from afr.primitives import triangle_filled_z, triangle_textured_z
 
+BACKFACE_CULL = True
+
 
 @dataclass
 class Camera:
@@ -153,6 +155,8 @@ def draw_model(
     *,
     scene: Scene | None = None,
     zbuf: list[float] | None = None,
+    cull_backfaces: bool = True,
+    front_face_ccw: bool = True,
 ) -> None:
     sw = surface.get_width()
     sh = surface.get_height()
@@ -209,6 +213,20 @@ def draw_model(
             a_ndc = va.clip.to_vec3(perspective_divide=True)
             b_ndc = vb.clip.to_vec3(perspective_divide=True)
             c_ndc = vc.clip.to_vec3(perspective_divide=True)
+
+            # Backface culling in NDC (before the Y-flip in ndc_to_screen).
+            # Convention: CCW triangles are front-facing unless overridden.
+            if BACKFACE_CULL and cull_backfaces:
+                area = (b_ndc.x - a_ndc.x) * (c_ndc.y - a_ndc.y) - (b_ndc.y - a_ndc.y) * (
+                    c_ndc.x - a_ndc.x
+                )
+                if front_face_ccw:
+                    if area <= 0.0:
+                        continue
+                else:
+                    if area >= 0.0:
+                        continue
+
             p1s = ndc_to_screen(a_ndc, sw, sh)
             p2s = ndc_to_screen(b_ndc, sw, sh)
             p3s = ndc_to_screen(c_ndc, sw, sh)
@@ -254,4 +272,6 @@ def draw_primitive(
         proj_mat,
         scene=scene,
         zbuf=zbuf,
+        cull_backfaces=getattr(prim, "cull_backfaces", True),
+        front_face_ccw=getattr(prim, "front_face_ccw", True),
     )

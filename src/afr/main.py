@@ -56,8 +56,12 @@ def main(argv: list[str] | None = None):
         running = do_inputs(app_state, dt)
 
         if not state.DEFERRED_PLOTTING:
-            render_surface.fill((0, 0, 0, 255))
-            draw(render_surface, app_state)
+            render_surface.lock()
+            try:
+                render_surface.fill((0, 0, 0, 255))
+                draw(render_surface, app_state)
+            finally:
+                render_surface.unlock()
         else:  # deferred mode
             if args.bench_blit:
                 # Keep the queue non-empty so the benchmark measures steady-state drain.

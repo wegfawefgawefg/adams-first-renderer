@@ -27,15 +27,19 @@ def draw_some_points(surface, dt: float, stats: bool = False) -> int:
     w = surface.get_width()
     h = surface.get_height()
     drained = 0
-    for _ in range(min(n, len(state.POINTS))):
-        if not state.POINTS:
-            break
-        p, c = state.POINTS.popleft()
-        x = int(p.x)
-        y = int(p.y)
-        if 0 <= x < w and 0 <= y < h:
-            surface.set_at((x, y), c)
-        if stats:
-            drained += 1
+    surface.lock()
+    try:
+        for _ in range(min(n, len(state.POINTS))):
+            if not state.POINTS:
+                break
+            p, c = state.POINTS.popleft()
+            x = int(p.x)
+            y = int(p.y)
+            if 0 <= x < w and 0 <= y < h:
+                surface.set_at((x, y), c)
+            if stats:
+                drained += 1
+    finally:
+        surface.unlock()
 
     return drained

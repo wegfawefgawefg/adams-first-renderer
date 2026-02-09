@@ -116,6 +116,9 @@ def load(app_state: AppState) -> None:
         )
         for prim in castle.primitives:
             prim.local_to_world = castle_recenter @ prim.local_to_world
+            # This particular castle OBJ appears to be authored with opposite winding
+            # from our glTF Mario. Keep culling enabled, but treat CW as front-facing.
+            prim.front_face_ccw = False
         castle_mn, castle_mx = scene_bounds(castle)
 
         # Re-center Mario around a useful pivot: bottom-center of his bounds.

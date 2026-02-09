@@ -17,7 +17,7 @@ def _parse_index(s: str, n: int) -> int:
     return i - 1
 
 
-def load_obj(path: str | Path) -> SceneData:
+def load_obj(path: str | Path, *, flip_v: bool = True) -> SceneData:
     """Load a minimal subset of Wavefront OBJ (+MTL).
 
     Supports:
@@ -82,8 +82,13 @@ def load_obj(path: str | Path) -> SceneData:
             continue
 
         if cmd == "vt" and len(args) >= 2:
-            # OBJ v is usually bottom-up; we keep as-is for now.
-            uvs.append(Vec2(float(args[0]), float(args[1])))
+            # Most OBJ assets use bottom-left UV origin; pygame surfaces are
+            # addressed top-left, so default to flipping V.
+            u = float(args[0])
+            v = float(args[1])
+            if flip_v:
+                v = 1.0 - v
+            uvs.append(Vec2(u, v))
             continue
 
         if cmd == "f" and len(args) >= 3:
@@ -126,4 +131,3 @@ def load_obj(path: str | Path) -> SceneData:
         prims.append(Primitive(mesh=mesh, material=mat, local_to_world=Mat4.identity()))
 
     return SceneData(primitives=prims)
-
