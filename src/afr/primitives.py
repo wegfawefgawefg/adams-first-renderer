@@ -1,15 +1,14 @@
 import math
 from afr.vec2 import Vec2
-from afr.state import POINTS
+import afr.state as state
 
 
 def point(surface, pos):
-    POINTS.append((pos, (255, 255, 255)))
-    # pygame.draw.rect(surface, (255, 255, 255), (pos.x, pos.y, 1, 1))
+    cpoint(surface, pos, (255, 255, 255))
 
 
 def cpoint(surface, pos, c):
-    POINTS.append((pos, c))
+    state.PLOT(surface, pos, c)
 
 
 def line(surface, a, b):
@@ -128,7 +127,7 @@ def shader(surface, func, args):
         for x in range(surface_width):
             col = func(surface, Vec2(x, y), *args)
             if col is not None:
-                surface.set_at((x, y), col)
+                cpoint(surface, Vec2(x, y), col)
 
 
 """

@@ -17,6 +17,14 @@ You can also run the installed script:
 uv run afr
 ```
 
+## Deferred Plotting
+
+By default AFR draws immediately each frame (fast). If you want to watch pixels blit in over time:
+
+```bash
+uv run afr --defer --blit-rate 20000
+```
+
 ## Controls
 
 - Quit: `Esc` or `q` (or close the window)

@@ -1,4 +1,31 @@
-POINTS = []
-POINTS_PER_FRAME = 1
-DELAY = 16
-cframe = 0
+from __future__ import annotations
+
+from collections import deque
+
+DEFERRED_PLOTTING = False
+
+# Deferred plotting drain rate (pixels per second).
+BLIT_PPS = 20_000
+
+# Fractional pixel accumulator for time-based draining.
+BLIT_ACCUM = 0.0
+
+# Queue entries are (Vec2, color).
+POINTS = deque()
+
+
+def plot_deferred(surface, pos, c) -> None:
+    # Enqueue pixels so the main loop can blit them out gradually.
+    POINTS.append((pos, c))
+
+
+def plot_immediate(surface, pos, c) -> None:
+    # Plot directly for max speed.
+    x = int(pos.x)
+    y = int(pos.y)
+    if 0 <= x < surface.get_width() and 0 <= y < surface.get_height():
+        surface.set_at((x, y), c)
+
+
+# Primitive plotting entrypoint. Configured by main().
+PLOT = plot_immediate

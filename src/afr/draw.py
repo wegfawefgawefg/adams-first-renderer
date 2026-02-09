@@ -3,8 +3,8 @@ import glm
 
 from afr.settings import RES, WINDOW_RES
 from afr.primitives import *
-from afr.state import cframe, POINTS, POINTS_PER_FRAME, DELAY
 from afr.colors import *
+import afr.state as state
 
 """ we are inventing these from scratch for education 
 ## lines
@@ -38,23 +38,6 @@ def mouse_pos():
     return Vec2(mp[0], mp[1]) / WINDOW_RES * RES
 
 
-def old_draw(surface):
-    angle = pygame.time.get_ticks() / 1000
-
-    rect_size = Vec2(16, 16)
-    center = RES / 2
-    rect_pos = center - rect_size / 2 + Vec2(32, 32)
-
-    for i in range(3):
-        rot = glm.rotate(glm.vec2(0.0, 1.0), angle + i * 90)
-        rect_pos_rotated = rot @ (rect_pos - center) + center
-        pygame.draw.rect(
-            surface, (255, 0, 0), (rect_pos_rotated.to_tuple(), rect_size.to_tuple())
-        )
-
-    pygame.draw.circle(surface, (0, 255, 0), mouse_pos(), 10)
-
-
 def draw_mouse_coords(surface):
     # draw the mouse coords in the top left
     mouse_coords = mouse_pos()
@@ -65,28 +48,36 @@ def draw_mouse_coords(surface):
     surface.blit(text, (10, 10))
 
 
-def draw_some_points(surface):
-    global cframe
-    cframe += 1
-    if cframe % DELAY == 0:
-        if POINTS:
-            for _ in range(0, POINTS_PER_FRAME):
-                p, c = POINTS.pop(0)
-                # pygame.draw.rect(surface, c, (p.x, p.y, 1, 1))
-                surface.set_at((int(p.x), int(p.y)), c)
+def draw_some_points(surface, dt: float):
+    # Drain queued pixels at a fixed rate (pixels per second). This is only
+    # meaningful when deferred plotting is enabled.
+    if not state.POINTS:
+        return
+
+    # Convert pixels/sec into pixels this frame (with fractional carry).
+    state.BLIT_ACCUM += float(state.BLIT_PPS) * float(dt)
+    n = int(state.BLIT_ACCUM)
+    if n <= 0:
+        return
+    state.BLIT_ACCUM -= n
+
+    w = surface.get_width()
+    h = surface.get_height()
+    for _ in range(min(n, len(state.POINTS))):
+        if not state.POINTS:
+            break
+        p, c = state.POINTS.popleft()
+        x = int(p.x)
+        y = int(p.y)
+        if 0 <= x < w and 0 <= y < h:
+            surface.set_at((x, y), c)
 
 
 def draw(surface):
-    # draw_mouse_coords(surface)
-    # pygame.draw.circle(surface, (0, 255, 0), mouse_pos(), 10)
-
-    draw_some_points(surface)
-
+    # Immediate mode: clear and redraw every frame.
     a = Vec2(0, 0)
     line_shader(surface, a, mouse_pos(), 2, WHITE)
 
-
-def draw_once(surface):
     # draw a point in the middle
     center = RES / 2
     # point(surface, center)
