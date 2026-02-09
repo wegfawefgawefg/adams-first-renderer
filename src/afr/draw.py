@@ -57,32 +57,52 @@ def draw(surface, app_state):
     t = pygame.time.get_ticks() / 1000.0
     angle = t * 0.5
 
-    # World-space camera.
+    # Camera from AppState (world space).
+    import math
+
+    cy = math.cos(app_state.cam_yaw)
+    sy = math.sin(app_state.cam_yaw)
+    cp = math.cos(app_state.cam_pitch)
+    sp = math.sin(app_state.cam_pitch)
+    forward = Vec3(cp * sy, sp, cp * cy).norm()
+    world_up = Vec3(0.0, 1.0, 0.0)
+    right = forward.cross(world_up).norm()
+    up = right.cross(forward).norm()
+    if app_state.cam_roll != 0.0:
+        right = right.rotate(forward, app_state.cam_roll)
+        up = up.rotate(forward, app_state.cam_roll)
+
     cam = Camera(
-        pos=Vec3(0.0, 0.0, 5.0),
-        target=Vec3(0.0, 0.0, 0.0),
-        up=Vec3(0.0, 1.0, 0.0),
+        pos=app_state.cam_pos,
+        target=app_state.cam_pos + forward,
+        up=up,
     )
     view = cam.view()
 
     # Ortho projection sized for the surface.
     proj = ortho_for_surface(
-        surface.get_width(), surface.get_height(), half_height=2.2, near=0.1, far=100.0
-    )
-
-    # Model transform in world space (scale + rotate).
-    model_mat = (
-        Mat4.rotate_x(angle)
-        @ Mat4.rotate_y(angle * 0.5)
-        @ Mat4.rotate_z(angle * 0.25)
-        @ Mat4.scale(1.2)
+        surface.get_width(), surface.get_height(), half_height=6.0, near=0.1, far=100.0
     )
 
     scene = Scene(lights=[PointLight(pos=cam.pos, intensity=1.0)], ambient=0.15)
 
-    # Z-buffer per frame (CPU).
+    # Z-buffer per frame (CPU), shared across all cubes.
     zbuf = [float("inf")] * (surface.get_width() * surface.get_height())
 
-    draw_model(
-        surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
-    )
+    # Kirby cube of Kirby cubes: 2x2x2 instances.
+    spacing = 3.0
+    offsets = (-0.5, 0.5)
+    for ox in offsets:
+        for oy in offsets:
+            for oz in offsets:
+                pos = Vec3(ox * spacing, oy * spacing, oz * spacing)
+                model_mat = (
+                    Mat4.translate(pos.x, pos.y, pos.z)
+                    @ Mat4.rotate_x(angle)
+                    @ Mat4.rotate_y(angle * 0.5)
+                    @ Mat4.rotate_z(angle * 0.25)
+                    @ Mat4.scale(1.0)
+                )
+                draw_model(
+                    surface, model, model_mat, view, proj, scene=scene, texture=tex, zbuf=zbuf
+                )

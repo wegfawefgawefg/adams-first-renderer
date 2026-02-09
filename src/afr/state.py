@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from collections import deque
 
 import pygame
+import math
 
 DEFERRED_PLOTTING = False
 
@@ -46,9 +47,17 @@ class AppState:
     cube_model: object | None = None
     kirby_tex: object | None = None
 
+    # Fly camera (world space).
+    cam_pos: object | None = None
+    cam_yaw: float = math.pi  # yaw=pi looks toward -Z with our convention
+    cam_pitch: float = 0.0
+    cam_roll: float = 0.0
+    mouse_look: bool = True
+
 
 from pathlib import Path
 from afr.models import Model
+from afr.linalg.vec3 import Vec3
 
 
 def load(app_state: AppState) -> None:
@@ -66,3 +75,6 @@ def load(app_state: AppState) -> None:
     if pygame.display.get_surface() is not None:
         tex = tex.convert_alpha()
     app_state.kirby_tex = tex
+
+    if app_state.cam_pos is None:
+        app_state.cam_pos = Vec3(0.0, 0.0, 5.0)
