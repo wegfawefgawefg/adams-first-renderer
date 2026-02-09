@@ -158,7 +158,9 @@ def triangle_filled_z(surface, a, b, c, col, zbuf):
                 cpoint(surface, Vec2(x, y), col)
 
 
-def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.0):
+def triangle_textured_z(
+    surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.0, *, wrap: bool = True
+):
     """Textured triangle with a simple Z-buffer (CPU).
 
     Inputs `a`, `b`, `c` are Vec3 where:
@@ -229,15 +231,21 @@ def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.
             u = alpha * uva.x + beta * uvb.x + gamma * uvc.x
             v = alpha * uva.y + beta * uvb.y + gamma * uvc.y
 
-            # Clamp (no wrapping for now).
-            if u < 0.0:
-                u = 0.0
-            elif u > 1.0:
-                u = 1.0
-            if v < 0.0:
-                v = 0.0
-            elif v > 1.0:
-                v = 1.0
+            # UV addressing.
+            # Real meshes often tile UVs outside [0,1] (e.g. u=8.3). Clamping
+            # collapses large triangles to a single texel; default to repeat.
+            if wrap:
+                u = u - math.floor(u)
+                v = v - math.floor(v)
+            else:
+                if u < 0.0:
+                    u = 0.0
+                elif u > 1.0:
+                    u = 1.0
+                if v < 0.0:
+                    v = 0.0
+                elif v > 1.0:
+                    v = 1.0
 
             tx = int(u * (tw - 1))
             ty = int(v * (th - 1))
