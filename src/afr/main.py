@@ -58,7 +58,9 @@ def main(argv: list[str] | None = None):
     clock = pygame.time.Clock()
 
     window = pygame.display.set_mode(WINDOW_RES.to_tuple())
-    render_surface = pygame.Surface(RES.to_tuple())
+    # Use an RGBA surface so textured triangles can alpha-blend correctly.
+    render_surface = pygame.Surface(RES.to_tuple(), flags=pygame.SRCALPHA, depth=32)
+    app_state = state.AppState()
 
     if args.bench_blit:
         # Pre-fill a lot of pixels so the queue stays non-empty long enough to
@@ -91,8 +93,8 @@ def main(argv: list[str] | None = None):
                 running = False
 
         if not state.DEFERRED_PLOTTING:
-            render_surface.fill((0, 0, 0))
-            draw(render_surface)
+            render_surface.fill((0, 0, 0, 255))
+            draw(render_surface, app_state)
         else:  # deferred mode
             if args.bench_blit:
                 # Keep the queue non-empty so the benchmark measures steady-state drain.
@@ -114,7 +116,7 @@ def main(argv: list[str] | None = None):
                 # then drain it gradually.
                 if not state.POINTS:
                     state.NEEDS_CLEAR = True
-                    draw(render_surface)
+                    draw(render_surface, app_state)
                 drained = draw_some_points(render_surface, dt, stats=args.stats)
                 if args.stats:
                     stat_pixels += drained

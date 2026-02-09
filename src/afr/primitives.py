@@ -240,11 +240,24 @@ def triangle_textured_z(surface, a, b, c, uva, uvb, uvc, texture, zbuf, shade=1.
             if a_ == 0:
                 continue
 
-            cpoint(
-                surface,
-                Vec2(x, y),
-                (min(255, int(r * shade)), min(255, int(g * shade)), min(255, int(b_ * shade))),
-            )
+            sr = min(255, int(r * shade))
+            sg = min(255, int(g * shade))
+            sb = min(255, int(b_ * shade))
+
+            # Deferred plotting can't blend (no destination pixel yet).
+            if state.PLOT is state.plot_deferred or a_ == 255:
+                cpoint(surface, Vec2(x, y), (sr, sg, sb, int(a_)))
+                continue
+
+            # Alpha blend (source-over) in immediate mode.
+            dr, dg, db, da = surface.get_at((x, y))
+            sa = a_ / 255.0
+            inv = 1.0 - sa
+            out_r = int(sr * sa + dr * inv)
+            out_g = int(sg * sa + dg * inv)
+            out_b = int(sb * sa + db * inv)
+            out_a = int(a_ + da * inv)
+            cpoint(surface, Vec2(x, y), (out_r, out_g, out_b, out_a))
 
 
 def triangle_filled_scanline(surface, a, b, c, col):
